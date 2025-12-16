@@ -17,7 +17,7 @@ interface Message {
 // Groq (LPU) API Configuration
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_TEXT = 'llama-3.3-70b-versatile'; // High intelligence for text
-const MODEL_VISION = 'llama-3.2-90b-vision-preview'; // For analyzing charts
+const MODEL_VISION = 'llama-3.2-11b-vision-preview'; // Updated: 90b-vision was decommissioned
 
 export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
     const [apiKey, setApiKey] = useState(() => localStorage.getItem('mr_wick_groq_api_key') || '');
