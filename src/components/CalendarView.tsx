@@ -4,9 +4,10 @@ import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown } from 'lucide-r
 
 interface CalendarViewProps {
     trades: Trade[];
+    currencySymbol: string;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ trades }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ trades, currencySymbol }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDay, setSelectedDay] = useState<{ date: Date, trades: Trade[], pnl: number } | null>(null);
 
@@ -124,7 +125,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ trades }) => {
                                         `}>
                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-0.5">{day.topSymbol}</span>
                                             <div className={`text-sm font-bold ${day.pnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                                {day.pnl >= 0 ? '+' : '-'}${Math.abs(day.pnl).toFixed(0)}
+                                                {day.pnl >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(day.pnl).toFixed(0)}
                                             </div>
                                         </div>
                                     ) : (
@@ -149,7 +150,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ trades }) => {
                                     {selectedDay.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
                                 </h3>
                                 <p className={`text-sm font-medium mt-1 ${selectedDay.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                    Daily Net: {selectedDay.pnl >= 0 ? '+' : '-'}${Math.abs(selectedDay.pnl).toFixed(2)}
+                                    Daily Net: {selectedDay.pnl >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(selectedDay.pnl).toFixed(2)}
                                 </p>
                             </div>
                             <button 
@@ -183,7 +184,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ trades }) => {
                                     
                                     <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
                                         <span className={`text-lg font-bold ${trade.pnl >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                                            {trade.pnl >= 0 ? '+' : '-'}${Math.abs(trade.pnl).toFixed(2)}
+                                            {trade.pnl >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(trade.pnl).toFixed(2)}
                                         </span>
                                         <span className="text-xs text-slate-400">
                                             {trade.exitPrice ? 'Closed' : 'Open'}
