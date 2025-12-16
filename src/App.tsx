@@ -211,9 +211,6 @@ const App: React.FC = () => {
           {currentView === 'calculator' && (
             <Calculator />
           )}
-          {currentView === 'ai' && (
-            <AIAnalyst trades={filteredTrades} />
-          )}
           {currentView === 'settings' && (
             <Settings 
                 accounts={accounts}
