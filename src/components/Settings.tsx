@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Account } from '../types';
-import { Moon, Sun, Plus, Trash2, Wallet, Copy, Download, Upload, Cloud, Check, AlertCircle, Database } from 'lucide-react';
+import { Moon, Sun, Plus, Trash2, Wallet, Copy, Download, Upload, Cloud, Check } from 'lucide-react';
 import { getCloudConfig, saveCloudConfig, uploadToCloud, downloadFromCloud } from '../services/cloud';
 
 interface SettingsProps {
