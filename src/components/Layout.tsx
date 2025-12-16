@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, History, Calendar, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator } from 'lucide-react';
+import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator } from 'lucide-react';
 import { Account } from '../types';
 
 interface LayoutProps {
@@ -25,13 +25,13 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Removed AI Analyst from navItems
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'calculator', label: 'Calculator', icon: Calculator },
     { id: 'history', label: 'History', icon: History },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'ai', label: 'AI Analyst', icon: BrainCircuit },
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
 
