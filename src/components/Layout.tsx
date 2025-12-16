@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator } from 'lucide-react';
+import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator, Cloud, Check, Loader2, AlertCircle } from 'lucide-react';
 import { Account } from '../types';
 
 interface LayoutProps {
@@ -11,6 +11,7 @@ interface LayoutProps {
   onAccountChange: (id: string) => void;
   onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onExport: () => void;
+  syncStatus: 'idle' | 'syncing' | 'saved' | 'error';
 }
 
 export const Layout: React.FC<LayoutProps> = ({ 
@@ -21,7 +22,8 @@ export const Layout: React.FC<LayoutProps> = ({
     selectedAccountId, 
     onAccountChange,
     onImport,
-    onExport
+    onExport,
+    syncStatus
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -40,6 +42,24 @@ export const Layout: React.FC<LayoutProps> = ({
       setIsMobileMenuOpen(false);
   };
 
+  const getSyncIcon = () => {
+      switch(syncStatus) {
+          case 'syncing': return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+          case 'saved': return <Check className="h-4 w-4 text-emerald-500" />;
+          case 'error': return <AlertCircle className="h-4 w-4 text-rose-500" />;
+          default: return <Cloud className="h-4 w-4 text-slate-400" />;
+      }
+  };
+
+  const getSyncText = () => {
+      switch(syncStatus) {
+          case 'syncing': return 'Syncing...';
+          case 'saved': return 'Saved to Cloud';
+          case 'error': return 'Sync Error';
+          default: return 'Cloud Sync';
+      }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
       {/* Mobile Header */}
@@ -50,9 +70,14 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
             <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">MR Wick <span className="text-gold-600 dark:text-gold-500">Trades</span></span>
          </div>
-         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-slate-600 dark:text-slate-300">
-             {isMobileMenuOpen ? <X /> : <Menu />}
-         </button>
+         <div className="flex items-center gap-3">
+             <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium">
+                 {getSyncIcon()}
+             </div>
+             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-slate-600 dark:text-slate-300">
+                 {isMobileMenuOpen ? <X /> : <Menu />}
+             </button>
+         </div>
       </div>
 
       {/* Sidebar Overlay for Mobile */}
@@ -70,6 +95,19 @@ export const Layout: React.FC<LayoutProps> = ({
             <Crosshair className="h-6 w-6 text-gold-600 dark:text-gold-500" />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">MR Wick <span className="text-gold-600 dark:text-gold-500">Trades</span></h1>
+        </div>
+
+        {/* Sync Status (Desktop) */}
+        <div className="px-6 py-4 hidden md:block border-b border-slate-100 dark:border-slate-800/50">
+             <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
+                 <span>Status</span>
+             </div>
+             <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                 {getSyncIcon()}
+                 <span className={`text-sm font-medium ${syncStatus === 'saved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                     {getSyncText()}
+                 </span>
+             </div>
         </div>
 
         {/* Account Switcher */}
@@ -111,7 +149,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Sync</h3>
             <label className="flex items-center w-full px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer transition-colors">
                 <Upload className="h-4 w-4 mr-3" />
-                Import Data
+                Import File
                 <input type="file" accept=".json,.csv" onChange={onImport} className="hidden" />
             </label>
             <button 
@@ -119,7 +157,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 className="flex items-center w-full px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
             >
                 <Download className="h-4 w-4 mr-3" />
-                Export Data
+                Export File
             </button>
         </div>
       </aside>
