@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Account } from '../types';
-import { Moon, Sun, Plus, Trash2, Save, Wallet, RefreshCw, Copy, Download, Upload } from 'lucide-react';
+import { Moon, Sun, Plus, Trash2, Wallet, Copy, Download, Upload, Cloud, Check, AlertCircle, Database } from 'lucide-react';
+import { getCloudConfig, saveCloudConfig, uploadToCloud, downloadFromCloud } from '../services/cloud';
 
 interface SettingsProps {
     accounts: Account[];
@@ -29,6 +30,74 @@ export const Settings: React.FC<SettingsProps> = ({
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [transferMode, setTransferMode] = useState<'EXPORT' | 'IMPORT'>('EXPORT');
     const [transferData, setTransferData] = useState('');
+
+    // Cloud Settings
+    const [supabaseUrl, setSupabaseUrl] = useState('');
+    const [supabaseKey, setSupabaseKey] = useState('');
+    const [syncId, setSyncId] = useState('');
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    useEffect(() => {
+        const config = getCloudConfig();
+        setSupabaseUrl(config.url);
+        setSupabaseKey(config.key);
+        setSyncId(config.syncId);
+    }, []);
+
+    const handleSaveCloudConfig = () => {
+        saveCloudConfig(supabaseUrl, supabaseKey, syncId);
+        alert("Cloud configuration saved locally!");
+    };
+
+    const handleCloudUpload = async () => {
+        if (!supabaseUrl || !supabaseKey || !syncId) {
+            alert("Please configure Cloud Settings first.");
+            return;
+        }
+        setIsSyncing(true);
+        try {
+            // We need to parse current app state. 
+            // Since we don't have direct access to 'trades' prop here, we use the onExportString helper 
+            // which gives us the current state, parse it, and send it.
+            const currentDataStr = onExportString();
+            const currentData = JSON.parse(currentDataStr);
+            
+            await uploadToCloud(currentData.trades, currentData.accounts);
+            alert("Upload Successful! Your data is safe in the cloud.");
+        } catch (error: any) {
+            console.error(error);
+            alert(`Upload Failed: ${error.message}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleCloudDownload = async () => {
+        if (!supabaseUrl || !supabaseKey || !syncId) {
+            alert("Please configure Cloud Settings first.");
+            return;
+        }
+        if(!window.confirm("This will OVERWRITE your current local data with data from the cloud. Continue?")) {
+            return;
+        }
+
+        setIsSyncing(true);
+        try {
+            const data = await downloadFromCloud();
+            if (data) {
+                // We create a string representation to reuse the import logic
+                const importStr = JSON.stringify(data);
+                onImportString(importStr);
+            } else {
+                alert("No data found for this Sync ID.");
+            }
+        } catch (error: any) {
+            console.error(error);
+            alert(`Download Failed: ${error.message}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const handleCreateAccount = (e: React.FormEvent) => {
         e.preventDefault();
@@ -100,14 +169,92 @@ export const Settings: React.FC<SettingsProps> = ({
                 </div>
             </section>
 
-             {/* Data Transfer Section (Manual Sync) */}
-             <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+             {/* Cloud Sync Section */}
+             <section className="bg-white dark:bg-slate-800 rounded-xl border border-blue-500/20 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-blue-50/50 dark:bg-blue-900/10">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center">
+                        <Cloud className="h-6 w-6 mr-2 text-blue-500" />
+                        Cloud Sync
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Connect to a free Supabase database to sync your data between devices.
+                    </p>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Supabase Project URL</label>
+                            <input 
+                                type="text" 
+                                value={supabaseUrl}
+                                onChange={(e) => setSupabaseUrl(e.target.value)}
+                                placeholder="https://xyz.supabase.co"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-slate-900 dark:text-white focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Supabase Publishable Key</label>
+                            <input 
+                                type="password" 
+                                value={supabaseKey}
+                                onChange={(e) => setSupabaseKey(e.target.value)}
+                                placeholder="sb_publishable_..."
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-slate-900 dark:text-white focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Sync ID (Secret Passphrase)</label>
+                        <div className="flex gap-2">
+                             <input 
+                                type="text" 
+                                value={syncId}
+                                onChange={(e) => setSyncId(e.target.value)}
+                                placeholder="my-secret-trading-id"
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-slate-900 dark:text-white focus:border-blue-500 outline-none font-mono"
+                            />
+                            <button 
+                                onClick={handleSaveCloudConfig}
+                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg font-medium text-slate-700 dark:text-slate-200 transition-colors"
+                            >
+                                <Check className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                            Enter the SAME ID on both devices. This acts as your password.
+                        </p>
+                    </div>
+
+                    <div className="flex gap-4 pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
+                        <button 
+                            onClick={handleCloudUpload}
+                            disabled={isSyncing}
+                            className="flex-1 flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold transition-colors disabled:opacity-50 shadow-lg shadow-blue-500/20"
+                        >
+                            <Upload className="h-5 w-5 mr-2" />
+                            {isSyncing ? 'Syncing...' : 'Upload to Cloud'}
+                        </button>
+                        <button 
+                            onClick={handleCloudDownload}
+                            disabled={isSyncing}
+                            className="flex-1 flex items-center justify-center px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold transition-colors disabled:opacity-50"
+                        >
+                            <Download className="h-5 w-5 mr-2" />
+                            {isSyncing ? 'Syncing...' : 'Download to Device'}
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+             {/* Legacy Manual Sync */}
+             <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm opacity-75">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Data Transfer</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                            Since this app runs locally, data doesn't sync automatically between devices.
-                            Use this to transfer your data.
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Manual Transfer</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Copy/Paste code if you don't use Cloud Sync.
                         </p>
                     </div>
                 </div>
@@ -115,17 +262,17 @@ export const Settings: React.FC<SettingsProps> = ({
                 <div className="flex flex-col sm:flex-row gap-4">
                     <button 
                         onClick={openExport}
-                        className="flex-1 flex items-center justify-center px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-700 dark:text-slate-200 font-medium transition-colors"
+                        className="flex-1 flex items-center justify-center px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm font-medium transition-colors"
                     >
-                        <Copy className="h-5 w-5 mr-2" />
-                        Get Sync Code (From PC)
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy Code
                     </button>
                     <button 
                         onClick={openImport}
-                        className="flex-1 flex items-center justify-center px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-700 dark:text-slate-200 font-medium transition-colors"
+                        className="flex-1 flex items-center justify-center px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm font-medium transition-colors"
                     >
-                        <Upload className="h-5 w-5 mr-2" />
-                        Paste Sync Code (To Mobile)
+                        <Upload className="h-4 w-4 mr-2" />
+                        Paste Code
                     </button>
                 </div>
             </section>
