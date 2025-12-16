@@ -191,11 +191,28 @@ const App: React.FC = () => {
       }
   };
 
+  // Helper to get currency symbol
+  const getCurrencySymbol = (currencyCode: string) => {
+      switch(currencyCode) {
+          case 'EUR': return '€';
+          case 'GBP': return '£';
+          case 'JPY': return '¥';
+          default: return '$';
+      }
+  };
+
   // Filter trades based on selected account
   const filteredTrades = useMemo(() => {
       if (selectedAccountId === 'all') return trades;
       return trades.filter(t => t.accountId === selectedAccountId);
   }, [trades, selectedAccountId]);
+  
+  // Get active currency symbol
+  const activeCurrency = useMemo(() => {
+      if (selectedAccountId === 'all') return '$';
+      const account = accounts.find(a => a.id === selectedAccountId);
+      return getCurrencySymbol(account?.currency || 'USD');
+  }, [accounts, selectedAccountId]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
@@ -231,7 +248,10 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView trades={filteredTrades} />
+            <CalendarView 
+                trades={filteredTrades} 
+                currencySymbol={activeCurrency}
+            />
           )}
           {currentView === 'calculator' && (
             <Calculator />
