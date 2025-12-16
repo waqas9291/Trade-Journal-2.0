@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Trade } from '../types';
-import { Send, Image as ImageIcon, Trash2, Key, Bot, User, Loader2, BarChart2, X, Terminal } from 'lucide-react';
+import { Send, Image as ImageIcon, Trash2, Key, Zap, User, Loader2, BarChart2, X, ExternalLink } from 'lucide-react';
 
 interface AIAnalystProps {
     trades: Trade[];
@@ -14,23 +14,23 @@ interface Message {
     isError?: boolean;
 }
 
-// Grok API Configuration
-const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-beta'; // or 'grok-2-latest' if available
+// Grok (LPU) API Configuration
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL_TEXT = 'llama-3.3-70b-versatile'; // High intelligence for text
+const MODEL_VISION = 'llama-3.2-90b-vision-preview'; // For analyzing charts
 
 export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
-    const [apiKey, setApiKey] = useState(() => localStorage.getItem('mr_wick_xai_api_key') || '');
+    const [apiKey, setApiKey] = useState(() => localStorage.getItem('mr_wick_groq_api_key') || '');
     const [messages, setMessages] = useState<Message[]>(() => {
-        const saved = localStorage.getItem('mr_wick_grok_history');
-        // If we have legacy gemini history (role: 'model'), we might want to clear it or map it. 
-        // For safety, let's start fresh if the roles don't match standard OpenAI format.
+        const saved = localStorage.getItem('mr_wick_groq_history');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                if (parsed.length > 0 && (parsed[0].role === 'model' || !parsed[0].role)) {
-                    return getIntroMessage();
+                // Ensure legacy formats don't break the app
+                if (parsed.length > 0 && parsed[0].content) {
+                    return parsed;
                 }
-                return parsed;
+                return getIntroMessage();
             } catch (e) {
                 return getIntroMessage();
             }
@@ -48,7 +48,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         return [{
             id: 'intro',
             role: 'assistant',
-            content: "I am Mr. Wick. Powered by Grok. I'm here to analyze your trades, review your charts, and sharpen your edge. Send me a chart or ask me to review your journal."
+            content: "I am Mr. Wick. I run on Llama 3 via Groq (Free & Fast). Send me your charts or trading logs. I don't sugarcoat, I just help you execute."
         }];
     }
 
@@ -59,11 +59,11 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
     // Persist Data
     useEffect(() => {
-        localStorage.setItem('mr_wick_xai_api_key', apiKey);
+        localStorage.setItem('mr_wick_groq_api_key', apiKey);
     }, [apiKey]);
 
     useEffect(() => {
-        localStorage.setItem('mr_wick_grok_history', JSON.stringify(messages));
+        localStorage.setItem('mr_wick_groq_history', JSON.stringify(messages));
     }, [messages]);
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,12 +79,8 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
     const clearChat = () => {
         if(window.confirm("Clear chat history?")) {
-            setMessages([{
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: "Memory wiped. We start fresh. What do you need?"
-            }]);
-            localStorage.removeItem('mr_wick_grok_history');
+            setMessages(getIntroMessage());
+            localStorage.removeItem('mr_wick_groq_history');
         }
     };
 
@@ -106,15 +102,21 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         setSelectedImage(null);
         setIsLoading(true);
 
+        // Determine if we need vision model or text model
+        // If the current message has an image, we MUST use the vision model
+        // Groq vision models have smaller context windows usually, so be careful
+        const hasImage = !!newMessage.image;
+        const activeModel = hasImage ? MODEL_VISION : MODEL_TEXT;
+
         try {
-            // 2. Prepare Payload for xAI (OpenAI compatible)
+            // 2. Prepare Payload for Groq (OpenAI compatible)
             const systemMessage = {
                 role: "system",
-                content: "You are 'Mr. Wick', a professional, disciplined, and slightly intense trading mentor. You focus on risk management, psychology, and price action. Keep answers concise, actionable, and stern but helpful. You are powered by Grok AI."
+                content: "You are 'Mr. Wick', a professional, disciplined, and slightly intense trading mentor. You focus on risk management, psychology, and price action. Keep answers concise, actionable, and stern but helpful."
             };
 
             const apiMessages = [systemMessage, ...newHistory.filter(m => !m.isError && m.id !== 'intro').map(m => {
-                // Handle Image Content for Vision Model
+                // Handle Image Content
                 if (m.image) {
                     return {
                         role: m.role,
@@ -138,17 +140,18 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             })];
 
             // 3. Fetch Request
-            const response = await fetch(GROK_API_URL, {
+            const response = await fetch(GROQ_API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiKey}`
                 },
                 body: JSON.stringify({
-                    model: GROK_MODEL,
+                    model: activeModel,
                     messages: apiMessages,
-                    stream: true, // We will handle simple streaming
-                    temperature: 0.7
+                    stream: true, 
+                    temperature: 0.6,
+                    max_tokens: 1024
                 })
             });
 
@@ -202,7 +205,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             setMessages(prev => [...prev, {
                 id: crypto.randomUUID(),
                 role: 'assistant',
-                content: `I encountered an error connecting to Grok. Check your API Key. (${error.message})`,
+                content: `I encountered an error connecting to Groq. Check your API Key. (${error.message})`,
                 isError: true
             }]);
         } finally {
@@ -216,7 +219,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             return;
         }
         
-        // Prepare a summary to save context window
+        // Prepare a summary
         const summary = trades.slice(0, 50).map(t => ({
             date: t.entryDate,
             symbol: t.symbol,
@@ -236,18 +239,17 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             {/* Header */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
                 <div className="flex items-center space-x-3">
-                    <div className="bg-slate-900 dark:bg-white p-2 rounded-lg">
-                        {/* Grok-style icon representation */}
-                        <Terminal className="h-6 w-6 text-white dark:text-slate-900" />
+                    <div className="bg-orange-500/10 p-2 rounded-lg">
+                        <Zap className="h-6 w-6 text-orange-600 dark:text-orange-500" />
                     </div>
                     <div>
                         <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             Mr. Wick
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">GROK</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-mono">GROQ-LPU</span>
                         </h2>
                         <p className="text-xs text-green-500 font-medium flex items-center">
                             <span className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
-                            Online
+                            Online (Llama 3.3)
                         </p>
                     </div>
                 </div>
@@ -272,14 +274,24 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             {/* API Key Banner */}
             {showKeyInput && (
                 <div className="p-4 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-700 shrink-0 animate-in slide-in-from-top-2">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">xAI (Grok) API Key Required</label>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Groq API Key (Free)</label>
+                        <a 
+                            href="https://console.groq.com/keys" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center"
+                        >
+                            Get Key Here <ExternalLink className="h-3 w-3 ml-1" />
+                        </a>
+                    </div>
                     <div className="flex gap-2">
                         <input 
                             type="password" 
                             value={apiKey}
                             onChange={(e) => setApiKey(e.target.value)}
-                            className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-slate-500 outline-none"
-                            placeholder="xai-..."
+                            className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none"
+                            placeholder="gsk_..."
                         />
                         <button 
                             onClick={() => setShowKeyInput(false)}
@@ -298,7 +310,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         <div className={`flex max-w-[85%] md:max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                             {/* Avatar */}
                             <div className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center mt-1 mx-2 ${msg.role === 'user' ? 'bg-slate-200 dark:bg-slate-700' : 'bg-slate-900 dark:bg-white'}`}>
-                                {msg.role === 'user' ? <User className="h-5 w-5 text-slate-500 dark:text-slate-400" /> : <Bot className="h-5 w-5 text-white dark:text-slate-900" />}
+                                {msg.role === 'user' ? <User className="h-5 w-5 text-slate-500 dark:text-slate-400" /> : <Zap className="h-5 w-5 text-white dark:text-slate-900" />}
                             </div>
                             
                             {/* Bubble */}
@@ -354,8 +366,8 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-                            placeholder="Ask Mr. Wick (Grok)..."
-                            className="w-full h-full bg-slate-100 dark:bg-slate-900 border-transparent focus:bg-white dark:focus:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-500 outline-none transition-all"
+                            placeholder="Ask Mr. Wick (Groq)..."
+                            className="w-full h-full bg-slate-100 dark:bg-slate-900 border-transparent focus:bg-white dark:focus:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none transition-all"
                         />
                     </div>
                     
