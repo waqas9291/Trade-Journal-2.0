@@ -14,7 +14,7 @@ interface Message {
     isError?: boolean;
 }
 
-// Grok (LPU) API Configuration
+// Groq (LPU) API Configuration
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_TEXT = 'llama-3.3-70b-versatile'; // High intelligence for text
 const MODEL_VISION = 'llama-3.2-90b-vision-preview'; // For analyzing charts
@@ -27,7 +27,9 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             try {
                 const parsed = JSON.parse(saved);
                 // Ensure legacy formats don't break the app
-                if (parsed.length > 0 && parsed[0].content) {
+                if (parsed.length > 0 && (parsed[0].content || parsed[0].role === 'model')) {
+                    // Convert old Google 'model' role to 'assistant' if needed
+                    if (parsed[0].role === 'model') return getIntroMessage();
                     return parsed;
                 }
                 return getIntroMessage();
@@ -104,7 +106,6 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
         // Determine if we need vision model or text model
         // If the current message has an image, we MUST use the vision model
-        // Groq vision models have smaller context windows usually, so be careful
         const hasImage = !!newMessage.image;
         const activeModel = hasImage ? MODEL_VISION : MODEL_TEXT;
 
