@@ -1,1 +1,0 @@
-# Trade-Journal-2.0
