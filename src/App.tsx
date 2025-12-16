@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { TradeLog } from './components/TradeLog';
@@ -10,6 +10,7 @@ import { Calculator } from './components/Calculator';
 import { Trade, Account } from './types';
 import { loadTrades, saveTrades, loadAccounts, saveAccounts } from './services/storage';
 import { parseCSV } from './services/csvParser';
+import { getCloudConfig, uploadToCloud, downloadFromCloud } from './services/cloud';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator'>('dashboard');
@@ -17,6 +18,11 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
+  // Sync Status State
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
+  const initialLoadRef = useRef(true);
+  const syncTimeoutRef = useRef<number | null>(null);
 
   // Theme Management
   useEffect(() => {
@@ -27,7 +33,7 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Initial Load
+  // Initial Load (Local Storage + Auto Cloud Pull)
   useEffect(() => {
     const loadedTrades = loadTrades();
     const loadedAccounts = loadAccounts();
@@ -43,16 +49,65 @@ const App: React.FC = () => {
     } else {
         setAccounts(loadedAccounts);
     }
+
+    // Auto-Download from Cloud on App Start
+    const config = getCloudConfig();
+    if (config.url && config.key && config.syncId) {
+        console.log("Checking cloud for updates...");
+        setSyncStatus('syncing');
+        downloadFromCloud().then(data => {
+            if (data) {
+                // Determine if cloud data is different/newer? 
+                // For simplicity in this serverless app, we prioritize cloud on boot.
+                // In a real app, we'd compare timestamps.
+                setTrades(data.trades);
+                setAccounts(data.accounts);
+                setSyncStatus('saved');
+                console.log("Synced from cloud.");
+            } else {
+                setSyncStatus('idle');
+            }
+        }).catch(err => {
+            console.error("Auto-download failed:", err);
+            setSyncStatus('error');
+        }).finally(() => {
+             initialLoadRef.current = false;
+        });
+    } else {
+        initialLoadRef.current = false;
+    }
   }, []);
 
-  // Persistence
+  // Persistence & Auto-Upload
   useEffect(() => {
+    // 1. Save to LocalStorage immediately
     saveTrades(trades);
-  }, [trades]);
-
-  useEffect(() => {
     saveAccounts(accounts);
-  }, [accounts]);
+
+    // 2. Auto-Upload to Cloud (Debounced)
+    if (initialLoadRef.current) return; // Don't upload during initial hydration
+
+    const config = getCloudConfig();
+    if (config.url && config.key && config.syncId) {
+        setSyncStatus('syncing');
+        
+        // Clear existing timeout to debounce
+        if (syncTimeoutRef.current) {
+            clearTimeout(syncTimeoutRef.current);
+        }
+
+        // Wait 2 seconds of inactivity before uploading
+        syncTimeoutRef.current = window.setTimeout(async () => {
+            try {
+                await uploadToCloud(trades, accounts);
+                setSyncStatus('saved');
+            } catch (err) {
+                console.error("Auto-upload failed", err);
+                setSyncStatus('error');
+            }
+        }, 2000);
+    }
+  }, [trades, accounts]);
 
   const handleAddTrade = (newTrade: Trade) => {
     setTrades(prev => [newTrade, ...prev]);
@@ -108,14 +163,12 @@ const App: React.FC = () => {
                   const parsedTrades = parseCSV(content, targetAccount);
                   
                   setTrades(prev => {
-                      // Create a map of existing trades for quick lookup
                       const existingMap = new Map<string, Trade>();
                       prev.forEach(t => existingMap.set(t.id, t));
                       
                       let newCount = 0;
                       let updateCount = 0;
 
-                      // Update existing trades or add new ones
                       parsedTrades.forEach(t => {
                           const existing = existingMap.get(t.id);
                           if (existing) {
@@ -129,7 +182,6 @@ const App: React.FC = () => {
 
                       alert(`Import complete.\nAdded: ${newCount} trades\nUpdated: ${updateCount} trades`);
                       
-                      // Convert map back to array and sort by date descending
                       return Array.from(existingMap.values()).sort((a, b) => 
                           new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()
                       );
@@ -139,7 +191,6 @@ const App: React.FC = () => {
                   alert('Error parsing CSV file. Please check the format.');
               }
           } else {
-              // Assume JSON
               try {
                   const json = JSON.parse(content);
                   if (Array.isArray(json)) {
@@ -152,7 +203,6 @@ const App: React.FC = () => {
           }
       };
       reader.readAsText(file);
-      // Reset input value to allow re-uploading the same file if needed
       e.target.value = '';
   };
 
@@ -166,7 +216,6 @@ const App: React.FC = () => {
       downloadAnchorNode.remove();
   };
 
-  // Sync Logic
   const getExportString = () => {
       const data = {
           trades: trades,
@@ -191,7 +240,6 @@ const App: React.FC = () => {
       }
   };
 
-  // Helper to get currency symbol
   const getCurrencySymbol = (currencyCode: string) => {
       switch(currencyCode) {
           case 'EUR': return '€';
@@ -201,13 +249,11 @@ const App: React.FC = () => {
       }
   };
 
-  // Filter trades based on selected account
   const filteredTrades = useMemo(() => {
       if (selectedAccountId === 'all') return trades;
       return trades.filter(t => t.accountId === selectedAccountId);
   }, [trades, selectedAccountId]);
   
-  // Get active currency symbol
   const activeCurrency = useMemo(() => {
       if (selectedAccountId === 'all') return '$';
       const account = accounts.find(a => a.id === selectedAccountId);
@@ -224,6 +270,7 @@ const App: React.FC = () => {
         onAccountChange={setSelectedAccountId}
         onImport={handleImport}
         onExport={handleExport}
+        syncStatus={syncStatus}
       >
         <main className="p-4 md:p-6 overflow-y-auto h-full">
           {currentView === 'dashboard' && (
