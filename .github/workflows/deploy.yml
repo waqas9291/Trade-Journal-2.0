@@ -20,7 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # Cache removed intentionally to prevent "lock file not found" error on first run
 
       - name: Install dependencies
         run: npm install
