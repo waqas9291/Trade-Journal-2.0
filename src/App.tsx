@@ -166,6 +166,31 @@ const App: React.FC = () => {
       downloadAnchorNode.remove();
   };
 
+  // Sync Logic
+  const getExportString = () => {
+      const data = {
+          trades: trades,
+          accounts: accounts,
+          version: '1.0'
+      };
+      return JSON.stringify(data);
+  };
+
+  const handleImportString = (jsonString: string) => {
+      try {
+          const data = JSON.parse(jsonString);
+          if (data.trades && Array.isArray(data.trades)) {
+              setTrades(data.trades);
+          }
+          if (data.accounts && Array.isArray(data.accounts)) {
+              setAccounts(data.accounts);
+          }
+          alert("Data synchronized successfully!");
+      } catch (e) {
+          alert("Invalid data code. Please ensure you copied the entire string.");
+      }
+  };
+
   // Filter trades based on selected account
   const filteredTrades = useMemo(() => {
       if (selectedAccountId === 'all') return trades;
@@ -211,6 +236,9 @@ const App: React.FC = () => {
           {currentView === 'calculator' && (
             <Calculator />
           )}
+          {currentView === 'ai' && (
+            <AIAnalyst trades={filteredTrades} />
+          )}
           {currentView === 'settings' && (
             <Settings 
                 accounts={accounts}
@@ -219,6 +247,8 @@ const App: React.FC = () => {
                 theme={theme}
                 toggleTheme={setTheme}
                 onClearData={handleClearData}
+                onExportString={getExportString}
+                onImportString={handleImportString}
             />
           )}
         </main>
