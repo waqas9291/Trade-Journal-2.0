@@ -1,7 +1,7 @@
 {
   "name": "trade-journal-pro",
   "private": true,
-  "version": "2.3.1",
+  "version": "2.3.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,8 +13,7 @@
     "react-dom": "^18.3.1",
     "lucide-react": "^0.378.0",
     "recharts": "^2.12.7",
-    "@supabase/supabase-js": "^2.42.0",
-    "@google/genai": "^0.1.1",
+    "@supabase/supabase-js": "^2.45.4",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0"
   },
