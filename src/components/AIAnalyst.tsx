@@ -109,14 +109,14 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                     onopen: () => {
                         const source = inputAudioContextRef.current!.createMediaStreamSource(stream);
                         const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
-                        scriptProcessor.onaudioprocess = (e) => {
+                        scriptProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
                             const inputData = e.inputBuffer.getChannelData(0);
                             const l = inputData.length;
                             const int16 = new Int16Array(l);
                             for (let i = 0; i < l; i++) {
                                 int16[i] = inputData[i] * 32768;
                             }
-                            sessionPromise.then(session => {
+                            sessionPromise.then((session: any) => {
                                 session.sendRealtimeInput({ 
                                     media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } 
                                 });
@@ -156,7 +156,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                             setLiveTranscription('');
                         }
                     },
-                    onerror: (e) => console.error("Live AI Error:", e),
+                    onerror: (e: any) => console.error("Live AI Error:", e),
                     onclose: () => stopLiveSession()
                 },
                 config: {
@@ -176,7 +176,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
     const stopLiveSession = () => {
         setIsLive(false);
-        sessionPromiseRef.current?.then(s => s.close());
+        sessionPromiseRef.current?.then((s: any) => s.close());
         inputAudioContextRef.current?.close();
         outputAudioContextRef.current?.close();
         sourcesRef.current.forEach(s => s.stop());
@@ -316,3 +316,4 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         </div>
     );
 };
+
