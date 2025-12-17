@@ -1,6 +1,24 @@
 import React, { useState } from 'react';
 import { Calculator as CalculatorIcon, DollarSign, Percent, TrendingUp, RefreshCw } from 'lucide-react';
 
+const PAIRS = [
+    { name: 'EURUSD', pipValue: 10 },
+    { name: 'GBPUSD', pipValue: 10 },
+    { name: 'AUDUSD', pipValue: 10 },
+    { name: 'NZDUSD', pipValue: 10 },
+    { name: 'USDCAD', pipValue: 7.35 }, // Approx
+    { name: 'USDCHF', pipValue: 11.1 }, // Approx
+    { name: 'USDJPY', pipValue: 6.7 },  // Approx (1000 JPY / 150)
+    { name: 'EURGBP', pipValue: 12.7 }, // Approx
+    { name: 'EURJPY', pipValue: 6.7 },
+    { name: 'GBPJPY', pipValue: 6.7 },
+    { name: 'XAUUSD', pipValue: 10 },   // Standard (0.10 move = $10 on 100oz contract?) or $1. It depends. Usually 1 pip (0.10) is $10.
+    { name: 'US30', pipValue: 1 },      // Varies widely
+    { name: 'NAS100', pipValue: 1 },    // Varies widely
+    { name: 'BTCUSD', pipValue: 1 },    // Varies widely
+    { name: 'Custom', pipValue: 0 }
+];
+
 export const Calculator: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'SIZE' | 'PNL'>('SIZE');
 
@@ -42,13 +60,20 @@ const PositionSizeCalculator = () => {
     const [balance, setBalance] = useState<number>(10000);
     const [riskPercent, setRiskPercent] = useState<number>(1);
     const [stopLoss, setStopLoss] = useState<number>(20);
-    const [pipValue, setPipValue] = useState<number>(10); // Default $10 for Standard Lot
+    const [pipValue, setPipValue] = useState<number>(10); 
     const [instrument, setInstrument] = useState('EURUSD');
+
+    const handleInstrumentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selected = PAIRS.find(p => p.name === e.target.value);
+        setInstrument(e.target.value);
+        if(selected && selected.name !== 'Custom') {
+            setPipValue(selected.pipValue);
+        }
+    };
 
     const riskAmount = (balance * riskPercent) / 100;
     // Formula: Lot = RiskAmount / (SL * PipValuePerLot)
-    // Note: PipValue is usually per Standard Lot (100k units)
-    const standardLots = riskAmount / (stopLoss * pipValue);
+    const standardLots = pipValue > 0 && stopLoss > 0 ? riskAmount / (stopLoss * pipValue) : 0;
 
     return (
         <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -59,6 +84,17 @@ const PositionSizeCalculator = () => {
                 </h3>
                 
                 <div className="space-y-4">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Instrument</label>
+                        <select 
+                            value={instrument}
+                            onChange={handleInstrumentChange}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:border-gold-500 outline-none"
+                        >
+                            {PAIRS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                        </select>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Account Balance ($)</label>
                         <input 
@@ -92,12 +128,16 @@ const PositionSizeCalculator = () => {
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Pip Value ($/Lot)</label>
                         <div className="relative">
                             <input 
-                                type="number" step="0.1"
+                                type="number" step="0.01"
                                 value={pipValue} 
                                 onChange={(e) => setPipValue(Number(e.target.value))}
                                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:border-gold-500 outline-none"
                             />
-                             <p className="absolute right-3 top-3.5 text-xs text-slate-400 pointer-events-none">Default: $10 (EURUSD)</p>
+                             {instrument !== 'Custom' && (
+                                 <p className="absolute right-3 top-3.5 text-xs text-slate-400 pointer-events-none">
+                                     Auto-set for {instrument}
+                                 </p>
+                             )}
                         </div>
                     </div>
                 </div>
@@ -134,17 +174,23 @@ const PnLCalculator = () => {
     const [exitPrice, setExitPrice] = useState<number>(1.0900);
     const [direction, setDirection] = useState<'BUY' | 'SELL'>('BUY');
     const [pipValue, setPipValue] = useState<number>(10);
+    const [instrument, setInstrument] = useState('EURUSD');
+
+    const handleInstrumentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selected = PAIRS.find(p => p.name === e.target.value);
+        setInstrument(e.target.value);
+        if(selected && selected.name !== 'Custom') {
+            setPipValue(selected.pipValue);
+        }
+    };
 
     // Calc
     const diff = direction === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice;
-    // Assuming Standard Lot (100k) and normal pairs where 0.0001 is a pip.
-    // However, simplest general way: (Diff / PointSize) * PipValue * Lots.
-    // Let's assume input is raw price.
-    // We'll estimate pips by raw difference * 10000 (for non-JPY).
-    // Better: Just use (Diff * Lots * ContractSize) ?? No, let's stick to Pip Value method.
     
-    // Auto-detect JPY pair logic could go here, but keep it simple:
-    const multiplier = entryPrice > 50 ? 100 : 10000; // Rough guess: if price > 50 it's likely JPY (e.g. 145.00) or Gold (2000), else e.g. 1.0500
+    // Auto-detect JPY pair logic for pips
+    const isJpyOrGold = entryPrice > 50; 
+    const multiplier = isJpyOrGold ? 100 : 10000; 
+    
     const pips = diff * multiplier; 
     const profit = pips * lots * pipValue;
 
@@ -168,6 +214,17 @@ const PnLCalculator = () => {
                 </div>
                 
                 <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Instrument</label>
+                        <select 
+                            value={instrument}
+                            onChange={handleInstrumentChange}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:border-gold-500 outline-none"
+                        >
+                            {PAIRS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                        </select>
+                    </div>
+
                      <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Volume (Lots)</label>
                         <input 
@@ -223,7 +280,7 @@ const PnLCalculator = () => {
                         <span className={`text-xl font-bold ${pips >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{pips.toFixed(1)}</span>
                     </div>
                     <p className="text-xs text-slate-400 mt-2 italic">
-                        *Estimation based on {entryPrice > 50 ? 'JPY/Gold' : 'Standard'} pip scale.
+                        *Estimation based on {isJpyOrGold ? 'JPY/Gold' : 'Standard'} pip scale.
                     </p>
                 </div>
             </div>
