@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -20,12 +21,10 @@ const App: React.FC = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
-  // Sync Status State
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
   const initialLoadRef = useRef(true);
   const syncTimeoutRef = useRef<number | null>(null);
 
-  // Theme Management
   useEffect(() => {
     if (theme === 'dark') {
         document.documentElement.classList.add('dark');
@@ -34,7 +33,6 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Initial Load (Local Storage + Auto Cloud Pull)
   useEffect(() => {
     const loadedTrades = loadTrades();
     const loadedAccounts = loadAccounts();
@@ -51,20 +49,14 @@ const App: React.FC = () => {
         setAccounts(loadedAccounts);
     }
 
-    // Auto-Download from Cloud on App Start
     const config = getCloudConfig();
     if (config.url && config.key && config.syncId) {
-        console.log("Checking cloud for updates...");
         setSyncStatus('syncing');
         downloadFromCloud().then(data => {
             if (data) {
-                // Determine if cloud data is different/newer? 
-                // For simplicity in this serverless app, we prioritize cloud on boot.
-                // In a real app, we'd compare timestamps.
                 setTrades(data.trades);
                 setAccounts(data.accounts);
                 setSyncStatus('saved');
-                console.log("Synced from cloud.");
             } else {
                 setSyncStatus('idle');
             }
@@ -79,25 +71,17 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Persistence & Auto-Upload
   useEffect(() => {
-    // 1. Save to LocalStorage immediately
     saveTrades(trades);
     saveAccounts(accounts);
 
-    // 2. Auto-Upload to Cloud (Debounced)
-    if (initialLoadRef.current) return; // Don't upload during initial hydration
+    if (initialLoadRef.current) return;
 
     const config = getCloudConfig();
     if (config.url && config.key && config.syncId) {
         setSyncStatus('syncing');
-        
-        // Clear existing timeout to debounce
-        if (syncTimeoutRef.current) {
-            clearTimeout(syncTimeoutRef.current);
-        }
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
-        // Wait 2 seconds of inactivity before uploading
         syncTimeoutRef.current = window.setTimeout(async () => {
             try {
                 await uploadToCloud(trades, accounts);
@@ -110,23 +94,13 @@ const App: React.FC = () => {
     }
   }, [trades, accounts]);
 
-  const handleAddTrade = (newTrade: Trade) => {
-    setTrades(prev => [newTrade, ...prev]);
-  };
-
-  const handleDeleteTrade = (id: string) => {
-    setTrades(prev => prev.filter(t => t.id !== id));
-  };
-
-  const handleUpdateTrade = (updatedTrade: Trade) => {
-    setTrades(prev => prev.map(t => t.id === updatedTrade.id ? updatedTrade : t));
-  };
+  const handleAddTrade = (newTrade: Trade) => setTrades(prev => [newTrade, ...prev]);
+  const handleDeleteTrade = (id: string) => setTrades(prev => prev.filter(t => t.id !== id));
+  const handleUpdateTrade = (updatedTrade: Trade) => setTrades(prev => prev.map(t => t.id === updatedTrade.id ? updatedTrade : t));
 
   const handleAddAccount = (newAccount: Account) => {
       setAccounts(prev => [...prev, newAccount]);
-      if (accounts.length === 0) {
-          setSelectedAccountId(newAccount.id);
-      }
+      if (accounts.length === 0) setSelectedAccountId(newAccount.id);
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -135,9 +109,7 @@ const App: React.FC = () => {
           return;
       }
       setAccounts(prev => prev.filter(a => a.id !== id));
-      if (selectedAccountId === id) {
-          setSelectedAccountId('all');
-      }
+      if (selectedAccountId === id) setSelectedAccountId('all');
   };
 
   const handleClearData = () => {
@@ -156,50 +128,31 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (event) => {
           const content = event.target?.result as string;
-          
           if (file.name.toLowerCase().endsWith('.csv')) {
               try {
-                  // Use the active account ID or the first account available
                   const targetAccount = selectedAccountId !== 'all' ? selectedAccountId : (accounts[0]?.id || '1');
                   const parsedTrades = parseCSV(content, targetAccount);
-                  
                   setTrades(prev => {
                       const existingMap = new Map<string, Trade>();
                       prev.forEach(t => existingMap.set(t.id, t));
-                      
-                      let newCount = 0;
-                      let updateCount = 0;
-
                       parsedTrades.forEach(t => {
                           const existing = existingMap.get(t.id);
-                          if (existing) {
-                              existingMap.set(t.id, { ...existing, ...t });
-                              updateCount++;
-                          } else {
-                              existingMap.set(t.id, t);
-                              newCount++;
-                          }
+                          if (existing) existingMap.set(t.id, { ...existing, ...t });
+                          else existingMap.set(t.id, t);
                       });
-
-                      alert(`Import complete.\nAdded: ${newCount} trades\nUpdated: ${updateCount} trades`);
-                      
                       return Array.from(existingMap.values()).sort((a, b) => 
                           new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()
                       );
                   });
               } catch (err) {
-                  console.error(err);
-                  alert('Error parsing CSV file. Please check the format.');
+                  alert('Error parsing CSV file.');
               }
           } else {
               try {
                   const json = JSON.parse(content);
-                  if (Array.isArray(json)) {
-                      setTrades(json);
-                      alert('Trades imported successfully!');
-                  }
+                  if (Array.isArray(json)) setTrades(json);
               } catch (err) {
-                  alert('Invalid file format. Please upload a valid JSON or CSV.');
+                  alert('Invalid file format.');
               }
           }
       };
@@ -217,36 +170,16 @@ const App: React.FC = () => {
       downloadAnchorNode.remove();
   };
 
-  const getExportString = () => {
-      const data = {
-          trades: trades,
-          accounts: accounts,
-          version: '1.0'
-      };
-      return JSON.stringify(data);
-  };
+  const getExportString = () => JSON.stringify({ trades, accounts, version: '1.0' });
 
   const handleImportString = (jsonString: string) => {
       try {
           const data = JSON.parse(jsonString);
-          if (data.trades && Array.isArray(data.trades)) {
-              setTrades(data.trades);
-          }
-          if (data.accounts && Array.isArray(data.accounts)) {
-              setAccounts(data.accounts);
-          }
+          if (data.trades) setTrades(data.trades);
+          if (data.accounts) setAccounts(data.accounts);
           alert("Data synchronized successfully!");
       } catch (e) {
-          alert("Invalid data code. Please ensure you copied the entire string.");
-      }
-  };
-
-  const getCurrencySymbol = (currencyCode: string) => {
-      switch(currencyCode) {
-          case 'EUR': return '€';
-          case 'GBP': return '£';
-          case 'JPY': return '¥';
-          default: return '$';
+          alert("Invalid data code.");
       }
   };
 
@@ -258,7 +191,12 @@ const App: React.FC = () => {
   const activeCurrency = useMemo(() => {
       if (selectedAccountId === 'all') return '$';
       const account = accounts.find(a => a.id === selectedAccountId);
-      return getCurrencySymbol(account?.currency || 'USD');
+      switch(account?.currency) {
+          case 'EUR': return '€';
+          case 'GBP': return '£';
+          case 'JPY': return '¥';
+          default: return '$';
+      }
   }, [accounts, selectedAccountId]);
 
   return (
@@ -274,54 +212,14 @@ const App: React.FC = () => {
         syncStatus={syncStatus}
       >
         <main className="p-4 md:p-6 overflow-y-auto h-full">
-          {currentView === 'dashboard' && (
-            <Dashboard 
-                trades={filteredTrades} 
-                accountBalance={accounts.find(a => a.id === selectedAccountId)?.balance || 0}
-            />
-          )}
-          {currentView === 'analytics' && (
-             <Analytics 
-                trades={filteredTrades}
-                accountBalance={accounts.find(a => a.id === selectedAccountId)?.balance || 0}
-             />
-          )}
-          {currentView === 'history' && (
-            <TradeLog 
-                trades={filteredTrades} 
-                accounts={accounts}
-                onAddTrade={handleAddTrade}
-                onDeleteTrade={handleDeleteTrade}
-                onUpdateTrade={handleUpdateTrade}
-            />
-          )}
-          {currentView === 'calendar' && (
-            <CalendarView 
-                trades={filteredTrades} 
-                currencySymbol={activeCurrency}
-            />
-          )}
-          {currentView === 'calculator' && (
-            <Calculator />
-          )}
-          {currentView === 'chart' && (
-            <Chart />
-          )}
-          {currentView === 'ai' && (
-            <AIAnalyst trades={filteredTrades} />
-          )}
-          {currentView === 'settings' && (
-            <Settings 
-                accounts={accounts}
-                onAddAccount={handleAddAccount}
-                onDeleteAccount={handleDeleteAccount}
-                theme={theme}
-                toggleTheme={setTheme}
-                onClearData={handleClearData}
-                onExportString={getExportString}
-                onImportString={handleImportString}
-            />
-          )}
+          {currentView === 'dashboard' && <Dashboard trades={filteredTrades} accountBalance={accounts.find(a => a.id === selectedAccountId)?.balance || 0} />}
+          {currentView === 'analytics' && <Analytics trades={filteredTrades} accountBalance={accounts.find(a => a.id === selectedAccountId)?.balance || 0} />}
+          {currentView === 'history' && <TradeLog trades={filteredTrades} accounts={accounts} onAddTrade={handleAddTrade} onDeleteTrade={handleDeleteTrade} onUpdateTrade={handleUpdateTrade} />}
+          {currentView === 'calendar' && <CalendarView trades={filteredTrades} currencySymbol={activeCurrency} />}
+          {currentView === 'calculator' && <Calculator />}
+          {currentView === 'chart' && <Chart />}
+          {currentView === 'ai' && <AIAnalyst trades={filteredTrades} />}
+          {currentView === 'settings' && <Settings accounts={accounts} onAddAccount={handleAddAccount} onDeleteAccount={handleDeleteAccount} theme={theme} toggleTheme={setTheme} onClearData={handleClearData} onExportString={getExportString} onImportString={handleImportString} />}
         </main>
       </Layout>
     </div>
