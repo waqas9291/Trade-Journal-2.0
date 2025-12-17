@@ -1,18 +1,17 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { TradeLog } from './components/TradeLog';
-import { CalendarView } from './components/CalendarView';
-import { AIAnalyst } from './components/AIAnalyst';
-import { Analytics } from './components/Analytics';
-import { Settings } from './components/Settings';
-import { Calculator } from './components/Calculator';
-import { Chart } from './components/Chart';
-import { Trade, Account } from './types';
-import { loadTrades, saveTrades, loadAccounts, saveAccounts } from './services/storage';
-import { parseCSV } from './services/csvParser';
-import { getCloudConfig, uploadToCloud, downloadFromCloud } from './services/cloud';
+import { Layout } from './components/Layout.tsx';
+import { Dashboard } from './components/Dashboard.tsx';
+import { TradeLog } from './components/TradeLog.tsx';
+import { CalendarView } from './components/CalendarView.tsx';
+import { AIAnalyst } from './components/AIAnalyst.tsx';
+import { Analytics } from './components/Analytics.tsx';
+import { Settings } from './components/Settings.tsx';
+import { Calculator } from './components/Calculator.tsx';
+import { Chart } from './components/Chart.tsx';
+import { Trade, Account } from './types.ts';
+import { loadTrades, saveTrades, loadAccounts, saveAccounts } from './services/storage.ts';
+import { parseCSV } from './services/csvParser.ts';
+import { getCloudConfig, uploadToCloud, downloadFromCloud } from './services/cloud.ts';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart'>('dashboard');
@@ -227,4 +226,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
