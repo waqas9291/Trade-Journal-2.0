@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Trade } from '../types';
-import { Send, Image as ImageIcon, Trash2, Key, Zap, User, Loader2, BarChart2, X, ExternalLink } from 'lucide-react';
+import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import { Send, Image as ImageIcon, Zap, User, Loader2, Target, Mic, MicOff, Volume2, X } from 'lucide-react';
 
 interface AIAnalystProps {
     trades: Trade[];
@@ -8,231 +10,208 @@ interface AIAnalystProps {
 
 interface Message {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant';
     content: string;
     image?: string;
     isError?: boolean;
 }
 
-// Groq (LPU) API Configuration
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL_TEXT = 'llama-3.3-70b-versatile'; // High intelligence for text
-const MODEL_VISION = 'llama-3.2-11b-vision-preview'; // Updated: 90b-vision was decommissioned
+// Manual Audio Encoding & Decoding for Gemini Live API
+function encode(bytes: Uint8Array) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
 
 export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
-    const [apiKey, setApiKey] = useState(() => localStorage.getItem('mr_wick_groq_api_key') || '');
-    const [messages, setMessages] = useState<Message[]>(() => {
-        const saved = localStorage.getItem('mr_wick_groq_history');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                // Ensure legacy formats don't break the app
-                if (parsed.length > 0 && (parsed[0].content || parsed[0].role === 'model')) {
-                    // Convert old Google 'model' role to 'assistant' if needed
-                    if (parsed[0].role === 'model') return getIntroMessage();
-                    return parsed;
-                }
-                return getIntroMessage();
-            } catch (e) {
-                return getIntroMessage();
-            }
-        }
-        return getIntroMessage();
-    });
-    
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isLive, setIsLive] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
-    const [showKeyInput, setShowKeyInput] = useState(!apiKey);
+    const [liveTranscription, setLiveTranscription] = useState('');
+    
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const sessionPromiseRef = useRef<Promise<any> | null>(null);
+    const inputAudioContextRef = useRef<AudioContext | null>(null);
+    const outputAudioContextRef = useRef<AudioContext | null>(null);
+    const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+    const nextStartTimeRef = useRef(0);
 
-    function getIntroMessage(): Message[] {
-        return [{
-            id: 'intro',
-            role: 'assistant',
-            content: "I am Mr. Wick. I run on Llama 3 via Groq (Free & Fast). Send me your charts or trading logs. I don't sugarcoat, I just help you execute."
-        }];
-    }
+    const SYSTEM_INSTRUCTION = `You are 'Mr. Wick', a legendary, disciplined, and high-stakes trading floor mentor. 
+    YOUR MISSION: Provide fully executable trade insights (signals) and call out strategy leaks.
+    
+    DATA CONTEXT: You have access to the user's trade journal. 
+    - If they win on Gold breakouts, tell them to wait for gold breakouts.
+    - If they lose on USDJPY reversals, warn them when they mention USDJPY.
+    - Be decisive. Provide specific "ENTRY", "STOP LOSS", and "TAKE PROFIT" levels when a setup is mentioned.
+    - Keep answers concise, stern, and actionable. No fluff. No generic advice.
+    - You are talking to a professional trader. Act like one.`;
 
-    // Auto-scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    // Persist Data
-    useEffect(() => {
-        localStorage.setItem('mr_wick_groq_api_key', apiKey);
-    }, [apiKey]);
-
-    useEffect(() => {
-        localStorage.setItem('mr_wick_groq_history', JSON.stringify(messages));
-    }, [messages]);
+    }, [messages, liveTranscription]);
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             const reader = new FileReader();
-            reader.onloadend = () => {
-                setSelectedImage(reader.result as string);
-            };
+            reader.onloadend = () => setSelectedImage(reader.result as string);
             reader.readAsDataURL(file);
         }
     };
 
-    const clearChat = () => {
-        if(window.confirm("Clear chat history?")) {
-            setMessages(getIntroMessage());
-            localStorage.removeItem('mr_wick_groq_history');
+    const startLiveSession = async () => {
+        try {
+            setIsLive(true);
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            const sessionPromise = ai.live.connect({
+                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                callbacks: {
+                    onopen: () => {
+                        const source = inputAudioContextRef.current!.createMediaStreamSource(stream);
+                        const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
+                        scriptProcessor.onaudioprocess = (e) => {
+                            const inputData = e.inputBuffer.getChannelData(0);
+                            const l = inputData.length;
+                            const int16 = new Int16Array(l);
+                            for (let i = 0; i < l; i++) {
+                                int16[i] = inputData[i] * 32768;
+                            }
+                            sessionPromise.then(session => {
+                                session.sendRealtimeInput({ 
+                                    media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } 
+                                });
+                            });
+                        };
+                        source.connect(scriptProcessor);
+                        scriptProcessor.connect(inputAudioContextRef.current!.destination);
+                    },
+                    onmessage: async (msg: LiveServerMessage) => {
+                        // Handle Transcriptions
+                        if (msg.serverContent?.outputTranscription) {
+                            setLiveTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
+                        }
+                        
+                        // Handle Audio Output
+                        const audioData = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+                        if (audioData && outputAudioContextRef.current) {
+                            const ctx = outputAudioContextRef.current;
+                            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+                            const buffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
+                            const source = ctx.createBufferSource();
+                            source.buffer = buffer;
+                            source.connect(ctx.destination);
+                            source.start(nextStartTimeRef.current);
+                            nextStartTimeRef.current += buffer.duration;
+                            sourcesRef.current.add(source);
+                            source.onended = () => sourcesRef.current.delete(source);
+                        }
+
+                        if (msg.serverContent?.interrupted) {
+                            sourcesRef.current.forEach(s => s.stop());
+                            sourcesRef.current.clear();
+                            nextStartTimeRef.current = 0;
+                        }
+
+                        if (msg.serverContent?.turnComplete) {
+                            setLiveTranscription('');
+                        }
+                    },
+                    onerror: (e) => console.error("Live AI Error:", e),
+                    onclose: () => stopLiveSession()
+                },
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    systemInstruction: `${SYSTEM_INSTRUCTION}\n\nContext of user trades: ${JSON.stringify(trades.slice(0, 10))}`,
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
+                    outputAudioTranscription: {}
+                }
+            });
+
+            sessionPromiseRef.current = sessionPromise;
+        } catch (err) {
+            console.error(err);
+            setIsLive(false);
         }
     };
 
-    const sendMessage = async (overrideText?: string, hiddenContext?: string) => {
-        const textToSend = overrideText || input;
-        if ((!textToSend && !selectedImage) || !apiKey) return;
+    const stopLiveSession = () => {
+        setIsLive(false);
+        sessionPromiseRef.current?.then(s => s.close());
+        inputAudioContextRef.current?.close();
+        outputAudioContextRef.current?.close();
+        sourcesRef.current.forEach(s => s.stop());
+        setLiveTranscription('');
+    };
 
-        // 1. Prepare User Message
-        const newMessage: Message = {
-            id: crypto.randomUUID(),
-            role: 'user',
-            content: textToSend,
-            image: selectedImage || undefined
-        };
+    const sendMessage = async (overrideText?: string) => {
+        const text = overrideText || input;
+        if (!text && !selectedImage) return;
 
-        const newHistory = [...messages, newMessage];
-        setMessages(newHistory);
+        const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text };
+        setMessages(prev => [...prev, userMsg]);
         setInput('');
         setSelectedImage(null);
         setIsLoading(true);
 
-        // Determine if we need vision model or text model
-        // If the current message has an image, we MUST use the vision model
-        const hasImage = !!newMessage.image;
-        const activeModel = hasImage ? MODEL_VISION : MODEL_TEXT;
-
         try {
-            // 2. Prepare Payload for Groq (OpenAI compatible)
-            const systemMessage = {
-                role: "system",
-                content: "You are 'Mr. Wick', a professional, disciplined, and slightly intense trading mentor. You focus on risk management, psychology, and price action. Keep answers concise, actionable, and stern but helpful."
-            };
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const parts: any[] = [{ text: `${text}\n\nJournal context: ${JSON.stringify(trades.slice(0, 15))}` }];
+            if (selectedImage) {
+                parts.unshift({ inlineData: { mimeType: 'image/jpeg', data: selectedImage.split(',')[1] } });
+            }
 
-            const apiMessages = [systemMessage, ...newHistory.filter(m => !m.isError && m.id !== 'intro').map(m => {
-                // Handle Image Content
-                if (m.image) {
-                    return {
-                        role: m.role,
-                        content: [
-                            { type: "text", text: m.content },
-                            { type: "image_url", image_url: { url: m.image } }
-                        ]
-                    };
-                }
-                // Handle Hidden Context (e.g. Journal Data)
-                if (m.id === newMessage.id && hiddenContext) {
-                     return {
-                        role: m.role,
-                        content: `${m.content}\n\n[SYSTEM DATA CONTEXT]: ${hiddenContext}`
-                    };
-                }
-                return {
-                    role: m.role,
-                    content: m.content
-                };
-            })];
-
-            // 3. Fetch Request
-            const response = await fetch(GROQ_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: activeModel,
-                    messages: apiMessages,
-                    stream: true, 
-                    temperature: 0.6,
-                    max_tokens: 1024
-                })
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: [{ role: 'user', parts }],
+                config: { systemInstruction: SYSTEM_INSTRUCTION }
             });
 
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error?.message || `API Error: ${response.status}`);
-            }
-
-            if (!response.body) throw new Error("No response body");
-
-            // 4. Handle Stream
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            const botMessageId = crypto.randomUUID();
-            let fullContent = "";
-
-            setMessages(prev => [...prev, {
-                id: botMessageId,
-                role: 'assistant',
-                content: ""
-            }]);
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const dataStr = line.replace('data: ', '');
-                        if (dataStr === '[DONE]') continue;
-                        try {
-                            const data = JSON.parse(dataStr);
-                            const contentDelta = data.choices[0]?.delta?.content || "";
-                            fullContent += contentDelta;
-                            
-                            setMessages(prev => prev.map(m => 
-                                m.id === botMessageId ? { ...m, content: fullContent } : m
-                            ));
-                        } catch (e) {
-                            console.warn("Error parsing stream chunk", e);
-                        }
-                    }
-                }
-            }
-
+            setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: response.text || '' }]);
         } catch (error: any) {
-            console.error(error);
-            setMessages(prev => [...prev, {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: `I encountered an error connecting to Groq. Check your API Key. (${error.message})`,
-                isError: true
-            }]);
+            setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: "Lost connection to the trade floor. Try again.", isError: true }]);
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const analyzeJournal = () => {
-        if (trades.length === 0) {
-            alert("No trades to analyze.");
-            return;
-        }
-        
-        // Prepare a summary
-        const summary = trades.slice(0, 50).map(t => ({
-            date: t.entryDate,
-            symbol: t.symbol,
-            type: t.direction,
-            pnl: t.pnl,
-            notes: t.notes
-        }));
-
-        sendMessage(
-            "Analyze my recent trading performance based on the data I'm providing. Find my leaks.",
-            JSON.stringify(summary)
-        );
     };
 
     return (
@@ -240,96 +219,60 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             {/* Header */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
                 <div className="flex items-center space-x-3">
-                    <div className="bg-orange-500/10 p-2 rounded-lg">
-                        <Zap className="h-6 w-6 text-orange-600 dark:text-orange-500" />
+                    <div className={`p-2 rounded-lg transition-all ${isLive ? 'bg-rose-500 animate-pulse' : 'bg-slate-900'}`}>
+                        <Zap className={`h-6 w-6 ${isLive ? 'text-white' : 'text-gold-500'}`} />
                     </div>
                     <div>
                         <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             Mr. Wick
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-mono">GROQ-LPU</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold-100 dark:bg-gold-900/30 text-gold-600 dark:text-gold-400 font-mono">ELITE MENTOR</span>
                         </h2>
                         <p className="text-xs text-green-500 font-medium flex items-center">
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
-                            Online (Llama 3.3)
+                            <span className={`w-2 h-2 rounded-full mr-1 ${isLive ? 'bg-rose-500' : 'bg-green-500 animate-pulse'}`}></span>
+                            {isLive ? 'Listening...' : 'Online'}
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                     <button 
-                        onClick={() => setShowKeyInput(!showKeyInput)}
-                        className={`p-2 rounded-lg transition-colors ${!apiKey ? 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 animate-pulse' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                        title="API Key Settings"
-                    >
-                        <Key className="h-5 w-5" />
-                    </button>
                     <button 
-                        onClick={clearChat}
-                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
-                        title="Clear History"
+                        onClick={() => isLive ? stopLiveSession() : startLiveSession()}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${isLive ? 'bg-rose-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-gold-500 hover:text-white shadow-sm'}`}
                     >
-                        <Trash2 className="h-5 w-5" />
+                        {isLive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                        {isLive ? 'Stop Feed' : 'Voice Mode'}
                     </button>
                 </div>
             </div>
 
-            {/* API Key Banner */}
-            {showKeyInput && (
-                <div className="p-4 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-700 shrink-0 animate-in slide-in-from-top-2">
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Groq API Key (Free)</label>
-                        <a 
-                            href="https://console.groq.com/keys" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center"
-                        >
-                            Get Key Here <ExternalLink className="h-3 w-3 ml-1" />
-                        </a>
-                    </div>
-                    <div className="flex gap-2">
-                        <input 
-                            type="password" 
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none"
-                            placeholder="gsk_..."
-                        />
-                        <button 
-                            onClick={() => setShowKeyInput(false)}
-                            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-bold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700"
-                        >
-                            Done
-                        </button>
-                    </div>
-                </div>
-            )}
-
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50 dark:bg-slate-900/50 relative">
+                {isLive && (
+                    <div className="absolute inset-0 z-10 bg-slate-950/90 flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 backdrop-blur-sm">
+                        <div className="w-32 h-32 bg-rose-500/10 rounded-full flex items-center justify-center mb-8 relative">
+                            <div className="absolute inset-0 bg-rose-500/20 rounded-full animate-ping"></div>
+                            <div className="absolute inset-4 bg-rose-500/40 rounded-full animate-pulse"></div>
+                            <Volume2 className="h-12 w-12 text-rose-500 relative z-10" />
+                        </div>
+                        <h3 className="text-2xl font-black text-white mb-2 tracking-tighter uppercase">Live Frequency Active</h3>
+                        <p className="text-slate-400 text-sm max-w-xs mb-10 leading-relaxed font-medium">Describe your current chart setup or ask for decisive entry levels.</p>
+                        
+                        <div className="w-full max-w-lg bg-white/5 border border-white/10 rounded-2xl p-6 min-h-[120px] flex items-center justify-center shadow-2xl">
+                            <p className="text-rose-400 font-mono italic text-sm leading-relaxed">
+                                {liveTranscription || "Awaiting voice input..."}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`flex max-w-[85%] md:max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                            {/* Avatar */}
-                            <div className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center mt-1 mx-2 ${msg.role === 'user' ? 'bg-slate-200 dark:bg-slate-700' : 'bg-slate-900 dark:bg-white'}`}>
-                                {msg.role === 'user' ? <User className="h-5 w-5 text-slate-500 dark:text-slate-400" /> : <Zap className="h-5 w-5 text-white dark:text-slate-900" />}
+                        <div className={`flex max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center mx-2 ${msg.role === 'user' ? 'bg-slate-700' : 'bg-slate-950 border border-gold-500/30'}`}>
+                                {msg.role === 'user' ? <User className="h-4 w-4 text-slate-400" /> : <Zap className="h-4 w-4 text-gold-500" />}
                             </div>
-                            
-                            {/* Bubble */}
-                            <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                                msg.role === 'user' 
-                                    ? 'bg-blue-600 text-white rounded-tr-none' 
-                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-tl-none'
-                            }`}>
-                                {msg.image && (
-                                    <img src={msg.image} alt="Upload" className="max-w-full rounded-lg mb-3 border border-white/20" />
-                                )}
-                                <div className="prose prose-sm dark:prose-invert max-w-none">
-                                     {msg.content.split('\n').map((line, i) => (
-                                         <p key={i} className="min-h-[1.2em] mb-1 last:mb-0">
-                                            {line.startsWith('**') ? <strong className={msg.role === 'assistant' ? "text-slate-900 dark:text-white" : ""}>{line.replace(/\*\*/g, '')}</strong> : line.replace(/\*\*/g, '')}
-                                         </p>
-                                     ))}
-                                </div>
+                            <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none font-medium' : 'bg-white dark:bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-none'}`}>
+                                {msg.image && <img src={msg.image} className="rounded-lg mb-3 max-h-64 border border-white/10" />}
+                                <div className="whitespace-pre-wrap">{msg.content}</div>
                             </div>
                         </div>
                     </div>
@@ -338,45 +281,34 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shrink-0">
+            <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-700 shrink-0">
                 {selectedImage && (
                     <div className="mb-3 inline-flex items-center bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
                         <ImageIcon className="h-4 w-4 text-slate-500 mr-2" />
-                        <span className="text-xs text-slate-600 dark:text-slate-300">Image attached</span>
-                        <button onClick={() => setSelectedImage(null)} className="ml-2 text-rose-500 hover:text-rose-600"><X className="h-3 w-3" /></button>
+                        <span className="text-xs text-slate-600 dark:text-slate-300">Chart Attached</span>
+                        <button onClick={() => setSelectedImage(null)} className="ml-2 text-rose-500"><X className="h-3 w-3" /></button>
                     </div>
                 )}
-                
                 <div className="flex gap-2">
                     <button 
-                        onClick={analyzeJournal}
-                        className="hidden md:flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-xl transition-colors"
-                        title="Analyze My Journal Data"
+                        onClick={() => sendMessage("Analyze my journal data and provide 3 specific trade signals for today's market.")} 
+                        className="p-3 bg-slate-900 text-gold-500 rounded-xl hover:bg-slate-950 transition-colors border border-gold-500/20" 
+                        title="Get Executable Signals"
                     >
-                        <BarChart2 className="h-5 w-5" />
+                        <Target className="h-5 w-5" />
                     </button>
-                    
-                    <label className="flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-xl cursor-pointer transition-colors">
+                    <label className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-xl cursor-pointer hover:bg-slate-600">
                         <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
                         <ImageIcon className="h-5 w-5" />
                     </label>
-
-                    <div className="flex-1 relative">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-                            placeholder="Ask Mr. Wick (Groq)..."
-                            className="w-full h-full bg-slate-100 dark:bg-slate-900 border-transparent focus:bg-white dark:focus:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                        />
-                    </div>
-                    
-                    <button 
-                        onClick={() => sendMessage()}
-                        disabled={isLoading || (!input && !selectedImage)}
-                        className="p-3 bg-slate-900 dark:bg-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-900 rounded-xl shadow-lg transition-all transform active:scale-95"
-                    >
+                    <input
+                        type="text" value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="Describe your setup..."
+                        className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-gold-500 outline-none transition-all"
+                    />
+                    <button onClick={() => sendMessage()} disabled={isLoading || (!input && !selectedImage)} className="p-3 bg-gold-600 text-white rounded-xl shadow-lg active:scale-95 transition-all">
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                     </button>
                 </div>
