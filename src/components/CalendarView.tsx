@@ -107,31 +107,34 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ trades, currencySymb
                             key={idx} 
                             onClick={() => handleDayClick(day)}
                             className={`
-                                aspect-square border-r border-b border-slate-100 dark:border-slate-700/50 p-2 relative transition-all duration-200
+                                aspect-square md:aspect-auto md:h-28 border-r border-b border-slate-100 dark:border-slate-700/50 p-1 md:p-2 relative transition-all duration-200
                                 ${day ? 'hover:bg-slate-50 dark:hover:bg-slate-700/20' : 'bg-slate-50/30 dark:bg-slate-800/30'}
                                 ${day?.hasTrades ? 'cursor-pointer' : ''}
                             `}
                         >
                             {day && (
-                                <div className="h-full flex flex-col items-center justify-between py-1">
-                                    <span className={`text-xs font-medium ${day.hasTrades ? 'text-slate-400 dark:text-slate-500' : 'text-slate-300 dark:text-slate-600'}`}>
+                                <>
+                                    {/* Date Top Left */}
+                                    <span className={`absolute top-1 left-1 md:top-2 md:left-2 text-[10px] md:text-xs font-bold ${day.hasTrades ? 'text-slate-500 dark:text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>
                                         {day.date}
                                     </span>
-                                    
-                                    {day.hasTrades ? (
-                                        <div className={`
-                                            flex-1 w-full flex flex-col justify-center items-center rounded-lg mx-1 my-1
-                                            ${day.pnl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10'}
-                                        `}>
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-0.5">{day.topSymbol}</span>
-                                            <div className={`text-sm font-bold ${day.pnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                                {day.pnl >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(day.pnl).toFixed(0)}
+
+                                    <div className="h-full flex flex-col items-center justify-center pt-3 md:pt-4">
+                                        {day.hasTrades ? (
+                                            <div className={`
+                                                flex flex-col items-center justify-center rounded-lg px-1 py-1 md:px-3 md:py-2 w-full max-w-[90%]
+                                                ${day.pnl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10'}
+                                            `}>
+                                                <span className="hidden md:block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-0.5">{day.topSymbol}</span>
+                                                <span className="md:hidden text-[8px] uppercase font-bold text-slate-500 dark:text-slate-400 leading-tight">{day.topSymbol}</span>
+                                                
+                                                <div className={`text-xs md:text-sm font-bold ${day.pnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                    {day.pnl >= 0 ? '+' : ''}{Math.abs(day.pnl).toFixed(0)}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex-1"></div>
-                                    )}
-                                </div>
+                                        ) : null}
+                                    </div>
+                                </>
                             )}
                         </div>
                     ))}
