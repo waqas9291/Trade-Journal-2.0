@@ -126,13 +126,16 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         scriptProcessor.connect(inputAudioContextRef.current!.destination);
                     },
                     onmessage: async (msg: LiveServerMessage) => {
+                        const content = msg.serverContent;
+                        if (!content) return;
+
                         // Handle Transcriptions
-                        if (msg.serverContent?.outputTranscription) {
-                            setLiveTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
+                        if (content.outputTranscription) {
+                            setLiveTranscription(prev => prev + content.outputTranscription!.text);
                         }
                         
                         // Handle Audio Output
-                        const audioData = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+                        const audioData = content.modelTurn?.parts?.[0]?.inlineData?.data;
                         if (audioData && outputAudioContextRef.current) {
                             const ctx = outputAudioContextRef.current;
                             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
@@ -146,17 +149,22 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                             source.onended = () => sourcesRef.current.delete(source);
                         }
 
-                        if (msg.serverContent?.interrupted) {
-                            sourcesRef.current.forEach(s => s.stop());
+                        if (content.interrupted) {
+                            sourcesRef.current.forEach(s => {
+                                try { s.stop(); } catch(e) {}
+                            });
                             sourcesRef.current.clear();
                             nextStartTimeRef.current = 0;
                         }
 
-                        if (msg.serverContent?.turnComplete) {
+                        if (content.turnComplete) {
                             setLiveTranscription('');
                         }
                     },
-                    onerror: (e: any) => console.error("Live AI Error:", e),
+                    onerror: (e: any) => {
+                        console.error("Live AI Error:", e);
+                        stopLiveSession();
+                    },
                     onclose: () => stopLiveSession()
                 },
                 config: {
@@ -176,10 +184,17 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
     const stopLiveSession = () => {
         setIsLive(false);
-        sessionPromiseRef.current?.then((s: any) => s.close());
-        inputAudioContextRef.current?.close();
-        outputAudioContextRef.current?.close();
-        sourcesRef.current.forEach(s => s.stop());
+        if (sessionPromiseRef.current) {
+            sessionPromiseRef.current.then((s: any) => {
+                try { s.close(); } catch(e) {}
+            });
+        }
+        inputAudioContextRef.current?.close().catch(() => {});
+        outputAudioContextRef.current?.close().catch(() => {});
+        sourcesRef.current.forEach(s => {
+            try { s.stop(); } catch(e) {}
+        });
+        sourcesRef.current.clear();
         setLiveTranscription('');
     };
 
