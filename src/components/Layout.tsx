@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
-import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator, Cloud, Check, Loader2, AlertCircle, CandlestickChart } from 'lucide-react';
+import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator, CandlestickChart, Cloud, Check, Loader2, AlertCircle } from 'lucide-react';
 import { Account } from '../types';
 
+// Updated interface to include 'chart' view and syncStatus
 interface LayoutProps {
   children: React.ReactNode;
   currentView: 'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart';
@@ -27,6 +29,7 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
+  // Added chart to navItems
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
@@ -38,11 +41,12 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
 
-  const handleNavClick = (id: any) => {
+  const handleNavClick = (id: typeof navItems[number]['id']) => {
       onNavigate(id);
       setIsMobileMenuOpen(false);
   };
 
+  // Logic to get sync icon based on status
   const getSyncIcon = () => {
       switch(syncStatus) {
           case 'syncing': return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
@@ -137,7 +141,7 @@ export const Layout: React.FC<LayoutProps> = ({
               className={`flex items-center w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                 currentView === item.id
                   ? 'bg-gold-500/10 text-gold-600 dark:text-gold-500 shadow-sm border border-gold-500/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <item.icon className={`h-5 w-5 mr-3 ${currentView === item.id ? 'text-gold-600 dark:text-gold-500' : 'text-slate-500'}`} />
@@ -150,7 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Sync</h3>
             <label className="flex items-center w-full px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer transition-colors">
                 <Upload className="h-4 w-4 mr-3" />
-                Import File
+                Import Data
                 <input type="file" accept=".json,.csv" onChange={onImport} className="hidden" />
             </label>
             <button 
@@ -158,7 +162,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 className="flex items-center w-full px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
             >
                 <Download className="h-4 w-4 mr-3" />
-                Export File
+                Export Data
             </button>
         </div>
       </aside>
