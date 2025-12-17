@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator, Cloud, Check, Loader2, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Upload, Download, Crosshair, Menu, X, Settings, Calculator, Cloud, Check, Loader2, AlertCircle, CandlestickChart } from 'lucide-react';
 import { Account } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
-  currentView: 'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator';
-  onNavigate: (view: 'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator') => void;
+  currentView: 'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart';
+  onNavigate: (view: 'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart') => void;
   accounts: Account[];
   selectedAccountId: string;
   onAccountChange: (id: string) => void;
@@ -30,6 +30,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+    { id: 'chart', label: 'Chart', icon: CandlestickChart },
     { id: 'calculator', label: 'Calculator', icon: Calculator },
     { id: 'history', label: 'History', icon: History },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
