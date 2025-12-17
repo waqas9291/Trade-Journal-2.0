@@ -7,13 +7,14 @@ import { AIAnalyst } from './components/AIAnalyst';
 import { Analytics } from './components/Analytics';
 import { Settings } from './components/Settings';
 import { Calculator } from './components/Calculator';
+import { Chart } from './components/Chart';
 import { Trade, Account } from './types';
 import { loadTrades, saveTrades, loadAccounts, saveAccounts } from './services/storage';
 import { parseCSV } from './services/csvParser';
 import { getCloudConfig, uploadToCloud, downloadFromCloud } from './services/cloud';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart'>('dashboard');
   const [trades, setTrades] = useState<Trade[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
@@ -302,6 +303,9 @@ const App: React.FC = () => {
           )}
           {currentView === 'calculator' && (
             <Calculator />
+          )}
+          {currentView === 'chart' && (
+            <Chart />
           )}
           {currentView === 'ai' && (
             <AIAnalyst trades={filteredTrades} />
