@@ -81,23 +81,11 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
     - Keep answers concise, stern, and actionable. No fluff. No generic advice.
     - You are talking to a professional trader. Act like one.`;
 
-    // Safe access to process.env
-    const getApiKey = () => {
-        try {
-            return process.env.API_KEY || '';
-        } catch (e) {
-            return '';
-        }
-    };
-
     useEffect(() => {
         const checkKey = async () => {
-            const currentKey = getApiKey();
-            if (!currentKey && (window as any).aistudio?.hasSelectedApiKey) {
+            if ((window as any).aistudio?.hasSelectedApiKey) {
                 const selected = await (window as any).aistudio.hasSelectedApiKey();
                 setHasApiKey(selected);
-            } else if (!currentKey) {
-                setHasApiKey(false);
             }
         };
         checkKey();
@@ -124,15 +112,9 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
     };
 
     const startLiveSession = async () => {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            handleSelectKey();
-            return;
-        }
-
         try {
             setIsLive(true);
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
             const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
             inputAudioContextRef.current = new AudioContextClass({ sampleRate: 16000 });
@@ -144,10 +126,9 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                 model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                 callbacks: {
                     onopen: () => {
-                        if (!inputAudioContextRef.current) return;
-                        const source = inputAudioContextRef.current.createMediaStreamSource(stream);
-                        const scriptProcessor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
-                        scriptProcessor.onaudioprocess = (e) => {
+                        const source = inputAudioContextRef.current!.createMediaStreamSource(stream);
+                        const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
+                        scriptProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
                             const inputData = e.inputBuffer.getChannelData(0);
                             const l = inputData.length;
                             const int16 = new Int16Array(l);
@@ -161,18 +142,16 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                             });
                         };
                         source.connect(scriptProcessor);
-                        scriptProcessor.connect(inputAudioContextRef.current.destination);
+                        scriptProcessor.connect(inputAudioContextRef.current!.destination);
                     },
                     onmessage: async (msg: LiveServerMessage) => {
                         const content = msg.serverContent;
                         if (!content) return;
 
-                        // Handle Transcriptions
                         if (content.outputTranscription) {
                             setLiveTranscription(prev => prev + content.outputTranscription!.text);
                         }
                         
-                        // Handle Audio Output
                         const audioData = content.modelTurn?.parts?.[0]?.inlineData?.data;
                         if (audioData && outputAudioContextRef.current) {
                             const ctx = outputAudioContextRef.current;
@@ -188,9 +167,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         }
 
                         if (content.interrupted) {
-                            sourcesRef.current.forEach(s => {
-                                try { s.stop(); } catch(e) {}
-                            });
+                            sourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
                             sourcesRef.current.clear();
                             nextStartTimeRef.current = 0;
                         }
@@ -226,15 +203,11 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
     const stopLiveSession = () => {
         setIsLive(false);
         if (sessionPromiseRef.current) {
-            sessionPromiseRef.current.then((s: any) => {
-                try { s.close(); } catch(e) {}
-            });
+            sessionPromiseRef.current.then((s: any) => { try { s.close(); } catch(e) {} });
         }
         inputAudioContextRef.current?.close().catch(() => {});
         outputAudioContextRef.current?.close().catch(() => {});
-        sourcesRef.current.forEach(s => {
-            try { s.stop(); } catch(e) {}
-        });
+        sourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
         sourcesRef.current.clear();
         setLiveTranscription('');
     };
@@ -243,12 +216,6 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         const text = overrideText || input;
         if (!text && !selectedImage) return;
 
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            setHasApiKey(false);
-            return;
-        }
-
         const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
@@ -256,7 +223,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         setIsLoading(true);
 
         try {
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const parts: any[] = [{ text: `${text}\n\nJournal context: ${JSON.stringify(trades.slice(0, 15))}` }];
             if (selectedImage) {
                 parts.unshift({ inlineData: { mimeType: 'image/jpeg', data: selectedImage.split(',')[1] } });
@@ -272,14 +239,12 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
         } catch (error: any) {
             console.error("Chat Error:", error);
             let errorMessage = "Lost connection to the trade floor. Try again.";
-            
-            if (error?.message?.includes('Requested entity was not found') || error?.message?.includes('API key')) {
+            if (error?.message?.includes('Requested entity was not found')) {
                 setHasApiKey(false);
-                errorMessage = "API key issue. Ensure you have selected a valid paid project key.";
+                errorMessage = "API key issue. Gemini 3 requires a paid Google Cloud project key selected.";
             } else if (error?.message) {
                 errorMessage = `AI Error: ${error.message}`;
             }
-
             setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: errorMessage, isError: true }]);
         } finally {
             setIsLoading(false);
@@ -288,7 +253,6 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] max-w-5xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
-            {/* API Key Selection Warning */}
             {!hasApiKey && (
                 <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top duration-300">
                     <div className="flex items-center gap-3">
@@ -297,24 +261,12 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         </div>
                         <div>
                             <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Paid API Key Required</p>
-                            <p className="text-xs text-amber-700 dark:text-amber-400">Gemini 3 and Native Audio models require a paid Google Cloud project key.</p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400">Gemini 3 models require a paid Google Cloud project key.</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <a 
-                            href="https://ai.google.dev/gemini-api/docs/billing" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1"
-                        >
-                            Docs <ExternalLink className="h-3 w-3" />
-                        </a>
-                        <button 
-                            onClick={handleSelectKey}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
-                        >
-                            Select Key
-                        </button>
+                        <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1">Docs <ExternalLink className="h-3 w-3" /></a>
+                        <button onClick={handleSelectKey} className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition-colors shadow-sm">Select Key</button>
                     </div>
                 </div>
             )}
@@ -326,25 +278,17 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         <Zap className={`h-6 w-6 ${isLive ? 'text-white' : 'text-gold-500'}`} />
                     </div>
                     <div>
-                        <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            Mr. Wick
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold-100 dark:bg-gold-900/30 text-gold-600 dark:text-gold-400 font-mono uppercase">Elite Mentor</span>
-                        </h2>
+                        <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">Mr. Wick <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold-100 dark:bg-gold-900/30 text-gold-600 dark:text-gold-400 font-mono uppercase">Elite Mentor</span></h2>
                         <p className="text-xs text-green-500 font-medium flex items-center">
                             <span className={`w-2 h-2 rounded-full mr-1 ${isLive ? 'bg-rose-500' : 'bg-green-500 animate-pulse'}`}></span>
                             {isLive ? 'Listening...' : 'Online'}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                    <button 
-                        onClick={() => isLive ? stopLiveSession() : startLiveSession()}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${isLive ? 'bg-rose-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-gold-500 hover:text-white shadow-sm'}`}
-                    >
-                        {isLive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                        {isLive ? 'Stop Feed' : 'Voice Mode'}
-                    </button>
-                </div>
+                <button onClick={() => isLive ? stopLiveSession() : startLiveSession()} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${isLive ? 'bg-rose-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-gold-500 hover:text-white shadow-sm'}`}>
+                    {isLive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    {isLive ? 'Stop Feed' : 'Voice Mode'}
+                </button>
             </div>
 
             {/* Messages Area */}
@@ -358,11 +302,8 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                         </div>
                         <h3 className="text-2xl font-black text-white mb-2 tracking-tighter uppercase">Live Frequency Active</h3>
                         <p className="text-slate-400 text-sm max-w-xs mb-10 leading-relaxed font-medium">Describe your setup or ask for levels. Mr. Wick is listening.</p>
-                        
                         <div className="w-full max-w-lg bg-white/5 border border-white/10 rounded-2xl p-6 min-h-[120px] flex items-center justify-center shadow-2xl">
-                            <p className="text-rose-400 font-mono italic text-sm leading-relaxed">
-                                {liveTranscription || "Awaiting voice input..."}
-                            </p>
+                            <p className="text-rose-400 font-mono italic text-sm leading-relaxed">{liveTranscription || "Awaiting voice input..."}</p>
                         </div>
                     </div>
                 )}
@@ -400,25 +341,12 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ trades }) => {
                     </div>
                 )}
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => sendMessage("Analyze my journal data and provide 3 specific trade signals for today's market.")} 
-                        className="p-3 bg-slate-900 text-gold-500 rounded-xl hover:bg-slate-950 transition-colors border border-gold-500/20" 
-                        title="Get Executable Signals"
-                        disabled={isLoading}
-                    >
-                        <Target className="h-5 w-5" />
-                    </button>
+                    <button onClick={() => sendMessage("Analyze my journal data and provide 3 specific trade signals for today's market.")} className="p-3 bg-slate-900 text-gold-500 rounded-xl hover:bg-slate-950 transition-colors border border-gold-500/20" title="Get Executable Signals" disabled={isLoading}><Target className="h-5 w-5" /></button>
                     <label className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-xl cursor-pointer hover:bg-slate-600">
                         <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
                         <ImageIcon className="h-5 w-5" />
                     </label>
-                    <input
-                        type="text" value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                        placeholder="Ask Mr. Wick..."
-                        className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-gold-500 outline-none transition-all"
-                    />
+                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} placeholder="Ask Mr. Wick..." className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-gold-500 outline-none transition-all" />
                     <button onClick={() => sendMessage()} disabled={isLoading || (!input && !selectedImage)} className="p-3 bg-gold-600 text-white rounded-xl shadow-lg active:scale-95 transition-all">
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                     </button>
