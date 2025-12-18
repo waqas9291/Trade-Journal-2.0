@@ -26,7 +26,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, accountBalance }) 
             dailyMap.set(date, (dailyMap.get(date) || 0) + t.pnl);
         });
 
-        return Array.from(dailyMap.entries()).map(([date, pnl]) => ({ date, pnl }));
+        return Array.from(dailyMap.entries())
+            .map(([date, pnl]) => ({ date, pnl }))
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }, [trades]);
 
     return (
