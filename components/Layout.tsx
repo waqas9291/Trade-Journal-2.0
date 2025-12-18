@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, History, Calendar, BrainCircuit, BarChart2, Wallet, Crosshair, Menu, X, Settings, Calculator, CandlestickChart, ArrowUpCircle } from 'lucide-react';
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Calculator, CandlestickChart, Plus, HelpCircle, GraduationCap, Zap, ChevronLeft, Wallet } from 'lucide-react';
 import { Account } from '../types';
 
 interface LayoutProps {
@@ -17,66 +17,108 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
   
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-    { id: 'chart', label: 'Chart', icon: CandlestickChart },
-    { id: 'history', label: 'Trade Log', icon: History },
-    { id: 'withdrawals', label: 'Withdrawals', icon: ArrowUpCircle },
+    { id: 'history', label: 'Daily Journal', icon: BookOpen },
+    { id: 'analytics', label: 'Reports', icon: BarChart3 },
+    { id: 'chart', label: 'Insights', icon: CandlestickChart },
     { id: 'calculator', label: 'Calculator', icon: Calculator },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'ai', label: 'Mr. Wick AI', icon: BrainCircuit },
+    { id: 'ai', label: 'Mentor Mode', icon: Zap },
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
 
+  const secondaryItems = [
+    { id: 'university', label: 'University', icon: GraduationCap },
+    { id: 'help', label: 'Resource Center', icon: HelpCircle },
+  ];
+
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 border-b border-slate-800 flex items-center space-x-3">
-          <div className="relative">
-            <Crosshair className="h-8 w-8 text-gold-500" />
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border-2 border-slate-900 animate-pulse"></div>
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-950 font-inter">
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-[#12162B] flex flex-col transition-transform duration-300 md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center">
+             <span className="font-black text-white text-xs">TR</span>
           </div>
-          <div>
-            <h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">MR Wick</h1>
-            <p className="text-[10px] text-gold-500 font-bold tracking-[0.2em] uppercase opacity-80">Trades Pro</p>
-          </div>
+          <h1 className="text-lg font-black text-white tracking-tight">WICK <span className="text-slate-500">TRADES</span></h1>
         </div>
 
-        <div className="p-4">
-            <div className="relative group">
-                <Wallet className="absolute left-3 top-3 h-4 w-4 text-slate-500 group-hover:text-gold-500 transition-colors" />
-                <select 
-                    value={selectedAccountId}
-                    onChange={(e) => onAccountChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl pl-9 p-2.5 appearance-none focus:ring-2 focus:ring-gold-500/50 outline-none cursor-pointer"
-                >
-                    <option value="all">All Wallets</option>
-                    {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                    ))}
-                </select>
-            </div>
+        <div className="px-4 mb-6">
+          <button 
+            onClick={() => onNavigate('history')}
+            className="w-full py-3 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            Add Trade
+          </button>
         </div>
 
-        <nav className="flex-1 px-3 space-y-1 overflow-y-auto py-2">
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto custom-scrollbar">
           {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => { onNavigate(item.id); setIsMobileMenuOpen(false); }}
-              className={`flex items-center w-full px-4 py-3 text-sm font-bold rounded-xl transition-all ${
+              className={`flex items-center w-full px-4 py-2.5 text-[13px] font-semibold rounded-lg transition-all ${
                 currentView === item.id
-                  ? 'bg-gold-500 text-slate-900 shadow-lg shadow-gold-500/20 scale-[1.02]'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-slate-800/50 text-white border-l-4 border-indigo-500 rounded-l-none -ml-3 pl-6'
+                  : 'text-slate-400 hover:bg-slate-800/30 hover:text-slate-200'
               }`}
             >
-              <item.icon className={`h-5 w-5 mr-3 ${currentView === item.id ? 'text-slate-900' : 'text-slate-500'}`} />
+              <item.icon className={`h-4 w-4 mr-3 ${currentView === item.id ? 'text-indigo-400' : 'text-slate-500'}`} />
               {item.label}
+              {item.id === 'chart' && <span className="ml-auto text-[8px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-black">NEW</span>}
+            </button>
+          ))}
+
+          <div className="py-4 px-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">Resources</div>
+          {secondaryItems.map((item) => (
+            <button key={item.id} className="flex items-center w-full px-4 py-2.5 text-[13px] font-semibold text-slate-400 hover:text-slate-200">
+               <item.icon className="h-4 w-4 mr-3 text-slate-500" />
+               {item.label}
             </button>
           ))}
         </nav>
+
+        <div className="p-4 border-t border-slate-800 bg-[#0F1222]">
+           <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400">
+                 <Zap className="h-4 w-4" />
+              </div>
+              <div>
+                 <p className="text-xs font-bold text-white leading-none">Trading Pro</p>
+                 <p className="text-[10px] text-slate-500 mt-1">Elite Account</p>
+              </div>
+           </div>
+        </div>
       </aside>
 
+      {/* Main Container */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {children}
+        <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 shrink-0">
+           <div className="flex items-center gap-4">
+              <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
+                 <ChevronLeft className="h-4 w-4" />
+              </button>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{currentView}</h2>
+           </div>
+           
+           <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                 <Wallet className="h-4 w-4 text-slate-400" />
+                 <select 
+                    value={selectedAccountId}
+                    onChange={(e) => onAccountChange(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer"
+                 >
+                    <option value="all">Global Fund</option>
+                    {accounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    ))}
+                 </select>
+              </div>
+           </div>
+        </header>
+        <div className="flex-1 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
