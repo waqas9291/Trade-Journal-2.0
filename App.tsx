@@ -29,7 +29,7 @@ const App: React.FC = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // Initial Load
+  // Initial Load (Storage + Cloud Pull)
   useEffect(() => {
     const loadedTrades = loadTrades();
     const loadedAccounts = loadAccounts();
@@ -39,21 +39,20 @@ const App: React.FC = () => {
     setWithdrawals(loadedWithdrawals);
 
     if (loadedAccounts.length === 0) {
-      const defaultAcc = [{ id: '1', name: 'Main Fund', currency: 'USD', balance: 50000 }];
+      const defaultAcc = [{ id: '1', name: 'Elite Fund', currency: 'USD', balance: 50000 }];
       setAccounts(defaultAcc);
       saveAccounts(defaultAcc);
     } else {
       setAccounts(loadedAccounts);
     }
 
-    // Cloud pull on boot
     const config = getCloudConfig();
     if (config.url && config.key && config.syncId) {
       setSyncStatus('syncing');
       downloadFromCloud().then(data => {
         if (data) {
-          setTrades(data.trades);
-          setAccounts(data.accounts);
+          setTrades(data.trades || []);
+          setAccounts(data.accounts || []);
           setSyncStatus('saved');
         }
       }).catch(() => setSyncStatus('error'))
@@ -86,20 +85,17 @@ const App: React.FC = () => {
     }
   }, [trades, accounts, withdrawals]);
 
-  const activeAccount = useMemo(() => 
-    accounts.find(a => a.id === selectedAccountId) || null
-  , [accounts, selectedAccountId]);
-
   const stats = useMemo(() => {
-    const initial = activeAccount ? activeAccount.balance : accounts.reduce((s, a) => s + a.balance, 0);
+    const acc = accounts.find(a => a.id === selectedAccountId);
+    const initial = acc ? acc.balance : accounts.reduce((s, a) => s + a.balance, 0);
     const filteredTrades = selectedAccountId === 'all' ? trades : trades.filter(t => t.accountId === selectedAccountId);
     const pnl = filteredTrades.reduce((s, t) => s + t.pnl, 0);
     const withdrawn = withdrawals.filter(w => selectedAccountId === 'all' || w.accountId === selectedAccountId).reduce((s, w) => s + w.amount, 0);
-    return { initial, pnl, current: initial + pnl - withdrawn };
+    return { initial, current: initial + pnl - withdrawn };
   }, [trades, accounts, withdrawals, selectedAccountId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 transition-colors duration-200 overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-hidden">
       <Layout 
         currentView={currentView} 
         onNavigate={setCurrentView}
@@ -108,7 +104,7 @@ const App: React.FC = () => {
         onAccountChange={setSelectedAccountId}
         syncStatus={syncStatus}
       >
-        <main className="p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto">
+        <main className="p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar">
           {currentView === 'dashboard' && <Dashboard trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} accountBalance={stats.current} />}
           {currentView === 'analytics' && <Analytics trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} accountBalance={stats.initial} currentBalance={stats.current} />}
           {currentView === 'history' && <TradeLog trades={trades} accounts={accounts} onAddTrade={(t) => setTrades([t, ...trades])} onDeleteTrade={(id) => setTrades(trades.filter(t => t.id !== id))} onUpdateTrade={(u) => setTrades(trades.map(t => t.id === u.id ? u : t))} />}
