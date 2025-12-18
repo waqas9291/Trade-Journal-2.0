@@ -51,37 +51,45 @@ const App: React.FC = () => {
       setSyncStatus('syncing');
       downloadFromCloud().then(data => {
         if (data) {
-          setTrades(data.trades || []);
-          setAccounts(data.accounts || []);
+          if (data.trades) setTrades(data.trades);
+          if (data.accounts) setAccounts(data.accounts);
           setSyncStatus('saved');
         }
-      }).catch(() => setSyncStatus('error'))
+      }).catch(err => {
+          console.error("Auto-pull failed", err);
+          setSyncStatus('error');
+      })
       .finally(() => initialLoadRef.current = false);
     } else {
       initialLoadRef.current = false;
     }
   }, []);
 
-  // Debounced Auto-Sync
+  // Debounced Auto-Sync Effect
   useEffect(() => {
     if (initialLoadRef.current) return;
 
+    // Local Persistence
     saveTrades(trades);
     saveAccounts(accounts);
     saveWithdrawals(withdrawals);
 
+    // Cloud Persistence
     const config = getCloudConfig();
     if (config.url && config.key && config.syncId) {
       setSyncStatus('syncing');
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      
       syncTimeoutRef.current = window.setTimeout(async () => {
         try {
+          // We sync trades and accounts as the core data
           await uploadToCloud(trades, accounts);
           setSyncStatus('saved');
-        } catch {
+        } catch (err) {
+          console.error("Auto-sync failed", err);
           setSyncStatus('error');
         }
-      }, 3000);
+      }, 3000); // 3 second debounce
     }
   }, [trades, accounts, withdrawals]);
 
@@ -90,12 +98,13 @@ const App: React.FC = () => {
     const initial = acc ? acc.balance : accounts.reduce((s, a) => s + a.balance, 0);
     const filteredTrades = selectedAccountId === 'all' ? trades : trades.filter(t => t.accountId === selectedAccountId);
     const pnl = filteredTrades.reduce((s, t) => s + t.pnl, 0);
-    const withdrawn = withdrawals.filter(w => selectedAccountId === 'all' || w.accountId === selectedAccountId).reduce((s, w) => s + w.amount, 0);
+    const filteredWithdrawals = withdrawals.filter(w => selectedAccountId === 'all' || w.accountId === selectedAccountId);
+    const withdrawn = filteredWithdrawals.reduce((s, w) => s + w.amount, 0);
     return { initial, current: initial + pnl - withdrawn };
   }, [trades, accounts, withdrawals, selectedAccountId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-hidden font-inter">
       <Layout 
         currentView={currentView} 
         onNavigate={setCurrentView}
