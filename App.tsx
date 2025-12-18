@@ -82,7 +82,6 @@ const App: React.FC = () => {
       
       syncTimeoutRef.current = window.setTimeout(async () => {
         try {
-          // We sync trades and accounts as the core data
           await uploadToCloud(trades, accounts);
           setSyncStatus('saved');
         } catch (err) {
