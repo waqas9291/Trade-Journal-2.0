@@ -12,6 +12,7 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
 
     const calendarData = useMemo(() => {
         const days = [];
+        // Empty slots for previous month
         for (let i = 0; i < firstDay; i++) days.push(null);
         
         for (let i = 1; i <= daysInMonth; i++) {
@@ -23,6 +24,25 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
         return days;
     }, [currentDate, trades]);
 
+    // Calculate Weekly Data based on calendar grid rows
+    const weeklyData = useMemo(() => {
+        const weeks = [];
+        const fullGrid = [...calendarData];
+        
+        // Ensure we have a multiple of 7 to process full rows
+        while (fullGrid.length % 7 !== 0) {
+            fullGrid.push(null);
+        }
+
+        for (let i = 0; i < fullGrid.length; i += 7) {
+            const weekSlice = fullGrid.slice(i, i + 7);
+            const weekPnl = weekSlice.reduce((sum, day) => sum + (day?.pnl || 0), 0);
+            const activeDays = weekSlice.filter(day => day?.hasTrades).length;
+            weeks.push({ pnl: weekPnl, days: activeDays });
+        }
+        return weeks;
+    }, [calendarData]);
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -31,7 +51,7 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
                         <button onClick={() => setCurrentDate(new Date(year, month - 1))} className="p-1 hover:bg-slate-100 rounded-md">
                             <ChevronLeft className="h-4 w-4 text-slate-400" />
                         </button>
-                        <span className="text-xs font-black text-slate-800 uppercase tracking-widest uppercase">Today</span>
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Today</span>
                         <button onClick={() => setCurrentDate(new Date(year, month + 1))} className="p-1 hover:bg-slate-100 rounded-md">
                             <ChevronRight className="h-4 w-4 text-slate-400" />
                         </button>
@@ -61,7 +81,7 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
                                     {day.hasTrades && (
                                         <div className={`mt-3 w-full h-full rounded-lg p-2 flex flex-col items-center justify-center ${day.pnl >= 0 ? 'bg-emerald-50 border border-emerald-100' : 'bg-rose-50 border border-rose-100'}`}>
                                             <span className={`text-[11px] font-black ${day.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                {day.pnl >= 0 ? '+' : '-'}${Math.abs(day.pnl).toFixed(0)}
+                                                {day.pnl >= 0 ? '+' : '-'}${Math.abs(day.pnl).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                             </span>
                                             <span className="text-[8px] font-bold text-slate-500 mt-0.5">{day.trades} trade{day.trades > 1 ? 's' : ''}</span>
                                         </div>
@@ -74,11 +94,13 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
 
                 {/* Weekly Column Summary */}
                 <div className="w-24 space-y-px mt-[38px]">
-                    {[1, 2, 3, 4, 5].map(w => (
-                        <div key={w} className="bg-slate-50 border border-slate-200 h-24 rounded-lg flex flex-col items-center justify-center text-center p-2 mb-px">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Week {w}</p>
-                            <p className="text-[10px] font-black text-emerald-500 mt-1">$0.00</p>
-                            <p className="text-[8px] font-bold text-slate-400">0 days</p>
+                    {weeklyData.map((week, idx) => (
+                        <div key={idx} className="bg-slate-50 border border-slate-200 h-24 rounded-lg flex flex-col items-center justify-center text-center p-2 mb-px">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Week {idx + 1}</p>
+                            <p className={`text-[10px] font-black mt-1 ${week.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {week.pnl >= 0 ? '+' : '-'}${Math.abs(week.pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-[8px] font-bold text-slate-400">{week.days} day{week.days !== 1 ? 's' : ''}</p>
                         </div>
                     ))}
                 </div>
