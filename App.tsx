@@ -11,6 +11,7 @@ import { Chart } from './components/Chart';
 import { Withdrawals } from './components/Withdrawals';
 import { Trade, Account, Withdrawal } from './types';
 import { loadTrades, saveTrades, loadAccounts, saveAccounts, loadWithdrawals, saveWithdrawals } from './services/storage';
+import { getCloudConfig, uploadToCloud, downloadFromCloud } from './services/cloud';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'calendar' | 'ai' | 'analytics' | 'settings' | 'calculator' | 'chart' | 'withdrawals'>('dashboard');
@@ -19,11 +20,16 @@ const App: React.FC = () => {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
+
+  const initialLoadRef = useRef(true);
+  const syncTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  // Initial Load
   useEffect(() => {
     const loadedTrades = loadTrades();
     const loadedAccounts = loadAccounts();
@@ -33,58 +39,85 @@ const App: React.FC = () => {
     setWithdrawals(loadedWithdrawals);
 
     if (loadedAccounts.length === 0) {
-      const defaultAccount = [{ id: '1', name: 'Elite Fund', currency: 'USD', balance: 50000 }];
-      setAccounts(defaultAccount);
-      saveAccounts(defaultAccount);
+      const defaultAcc = [{ id: '1', name: 'Main Fund', currency: 'USD', balance: 50000 }];
+      setAccounts(defaultAcc);
+      saveAccounts(defaultAcc);
     } else {
       setAccounts(loadedAccounts);
     }
+
+    // Cloud pull on boot
+    const config = getCloudConfig();
+    if (config.url && config.key && config.syncId) {
+      setSyncStatus('syncing');
+      downloadFromCloud().then(data => {
+        if (data) {
+          setTrades(data.trades);
+          setAccounts(data.accounts);
+          setSyncStatus('saved');
+        }
+      }).catch(() => setSyncStatus('error'))
+      .finally(() => initialLoadRef.current = false);
+    } else {
+      initialLoadRef.current = false;
+    }
   }, []);
 
+  // Debounced Auto-Sync
   useEffect(() => {
+    if (initialLoadRef.current) return;
+
     saveTrades(trades);
     saveAccounts(accounts);
     saveWithdrawals(withdrawals);
+
+    const config = getCloudConfig();
+    if (config.url && config.key && config.syncId) {
+      setSyncStatus('syncing');
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = window.setTimeout(async () => {
+        try {
+          await uploadToCloud(trades, accounts);
+          setSyncStatus('saved');
+        } catch {
+          setSyncStatus('error');
+        }
+      }, 3000);
+    }
   }, [trades, accounts, withdrawals]);
 
-  const accountStats = useMemo(() => {
-    const acc = accounts.find(a => a.id === selectedAccountId);
-    const initialBalance = acc ? acc.balance : accounts.reduce((sum, a) => sum + a.balance, 0);
-    
-    const filteredTrades = selectedAccountId === 'all' ? trades : trades.filter(t => t.accountId === selectedAccountId);
-    const totalPnl = filteredTrades.filter(t => t.status === 'CLOSED').reduce((sum, t) => sum + t.pnl, 0);
-    
-    const filteredWithdrawals = selectedAccountId === 'all' ? withdrawals : withdrawals.filter(w => w.accountId === selectedAccountId);
-    const totalWithdrawn = filteredWithdrawals.reduce((sum, w) => sum + w.amount, 0);
+  const activeAccount = useMemo(() => 
+    accounts.find(a => a.id === selectedAccountId) || null
+  , [accounts, selectedAccountId]);
 
-    return {
-      initialBalance,
-      totalPnl,
-      totalWithdrawn,
-      currentBalance: initialBalance + totalPnl - totalWithdrawn
-    };
+  const stats = useMemo(() => {
+    const initial = activeAccount ? activeAccount.balance : accounts.reduce((s, a) => s + a.balance, 0);
+    const filteredTrades = selectedAccountId === 'all' ? trades : trades.filter(t => t.accountId === selectedAccountId);
+    const pnl = filteredTrades.reduce((s, t) => s + t.pnl, 0);
+    const withdrawn = withdrawals.filter(w => selectedAccountId === 'all' || w.accountId === selectedAccountId).reduce((s, w) => s + w.amount, 0);
+    return { initial, pnl, current: initial + pnl - withdrawn };
   }, [trades, accounts, withdrawals, selectedAccountId]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-950 text-slate-100 transition-colors duration-200 overflow-hidden">
       <Layout 
         currentView={currentView} 
         onNavigate={setCurrentView}
         accounts={accounts}
         selectedAccountId={selectedAccountId}
         onAccountChange={setSelectedAccountId}
-        syncStatus="idle"
+        syncStatus={syncStatus}
       >
-        <main className="p-4 md:p-6 h-full overflow-y-auto">
-          {currentView === 'dashboard' && <Dashboard trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} accountBalance={accountStats.currentBalance} />}
-          {currentView === 'withdrawals' && <Withdrawals withdrawals={withdrawals} onAdd={(w) => setWithdrawals([w, ...withdrawals])} onDelete={(id) => setWithdrawals(withdrawals.filter(w => w.id !== id))} accounts={accounts} />}
-          {currentView === 'chart' && <Chart />}
-          {currentView === 'history' && <TradeLog trades={trades} accounts={accounts} onAddTrade={(t) => setTrades([t, ...trades])} onDeleteTrade={(id) => setTrades(trades.filter(t => t.id !== id))} onUpdateTrade={(ut) => setTrades(trades.map(t => t.id === ut.id ? ut : t))} />}
+        <main className="p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto">
+          {currentView === 'dashboard' && <Dashboard trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} accountBalance={stats.current} />}
+          {currentView === 'analytics' && <Analytics trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} accountBalance={stats.initial} currentBalance={stats.current} />}
+          {currentView === 'history' && <TradeLog trades={trades} accounts={accounts} onAddTrade={(t) => setTrades([t, ...trades])} onDeleteTrade={(id) => setTrades(trades.filter(t => t.id !== id))} onUpdateTrade={(u) => setTrades(trades.map(t => t.id === u.id ? u : t))} />}
+          {currentView === 'calendar' && <CalendarView trades={trades.filter(t => selectedAccountId === 'all' || t.accountId === selectedAccountId)} currencySymbol="$" />}
           {currentView === 'ai' && <AIAnalyst trades={trades} />}
-          {currentView === 'analytics' && <Analytics trades={trades} accountBalance={accountStats.initialBalance} />}
-          {currentView === 'calendar' && <CalendarView trades={trades} currencySymbol="$" />}
-          {currentView === 'calculator' && <Calculator />}
-          {currentView === 'settings' && <Settings accounts={accounts} onAddAccount={(a) => setAccounts([...accounts, a])} onDeleteAccount={(id) => setAccounts(accounts.filter(a => a.id !== id))} theme={theme} toggleTheme={setTheme} onClearData={() => {}} onExportString={() => ""} onImportString={() => {}} />}
+          {currentView === 'calculator' && <Calculator balance={stats.current} />}
+          {currentView === 'withdrawals' && <Withdrawals withdrawals={withdrawals} accounts={accounts} onAdd={(w) => setWithdrawals([w, ...withdrawals])} onDelete={(id) => setWithdrawals(withdrawals.filter(w => w.id !== id))} />}
+          {currentView === 'chart' && <Chart />}
+          {currentView === 'settings' && <Settings accounts={accounts} theme={theme} toggleTheme={setTheme} onAddAccount={a => setAccounts([...accounts, a])} onDeleteAccount={id => setAccounts(accounts.filter(ac => ac.id !== id))} onClearData={() => {}} onExportString={() => ""} onImportString={() => {}} />}
         </main>
       </Layout>
     </div>
