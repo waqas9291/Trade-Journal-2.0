@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Trade } from '../types';
-import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }> = ({ trades, currencySymbol }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -18,12 +18,8 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
             const dateStr = new Date(year, month, i).toDateString();
             const dayTrades = trades.filter(t => new Date(t.entryDate).toDateString() === dateStr && t.status === 'CLOSED');
             
-            // Group by pair for the day cell summary
             const pairMap = new Map<string, number>();
-            dayTrades.forEach(t => {
-                pairMap.set(t.symbol, (pairMap.get(t.symbol) || 0) + t.pnl);
-            });
-            
+            dayTrades.forEach(t => { pairMap.set(t.symbol, (pairMap.get(t.symbol) || 0) + t.pnl); });
             const pairSummaries = Array.from(pairMap.entries()).map(([symbol, pnl]) => ({ symbol, pnl }));
             const totalPnl = dayTrades.reduce((s, t) => s + t.pnl, 0);
 
@@ -54,9 +50,7 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
 
             <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex-1 flex flex-col min-h-0">
                 <div className="grid grid-cols-7 bg-slate-950 border-b border-slate-800">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                        <div key={d} className="py-2 text-center text-[8px] font-black uppercase text-slate-600 tracking-widest">{d}</div>
-                    ))}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="py-2 text-center text-[8px] font-black uppercase text-slate-600 tracking-widest">{d}</div>)}
                 </div>
                 <div className="grid grid-cols-7 flex-1 min-h-0 auto-rows-fr">
                     {days.map((day, idx) => (
@@ -76,9 +70,7 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
                                                     <span>{ps.pnl >= 0 ? '+' : ''}{ps.pnl.toFixed(0)}</span>
                                                 </div>
                                             ))}
-                                            {day.pairSummaries.length > 3 && (
-                                                <div className="text-[7px] text-slate-500 text-center font-bold">+{day.pairSummaries.length - 3} more</div>
-                                            )}
+                                            {day.pairSummaries.length > 3 && <div className="text-[7px] text-slate-500 text-center font-bold">+{day.pairSummaries.length - 3} more</div>}
                                         </div>
                                     )}
                                     {day.hasTrades && (
@@ -95,18 +87,15 @@ export const CalendarView: React.FC<{ trades: Trade[], currencySymbol: string }>
 
             {selectedDay && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4">
-                    <div className="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md shadow-2xl overflow-hidden">
                         <div className="p-6 border-b border-slate-700 flex justify-between items-center">
                             <h3 className="text-xs font-black text-white uppercase italic tracking-widest">{selectedDay.date.toDateString()}</h3>
                             <button onClick={() => setSelectedDay(null)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
                         </div>
-                        <div className="p-6 space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                        <div className="p-6 space-y-3 max-h-[50vh] overflow-y-auto">
                             {selectedDay.trades.map(t => (
                                 <div key={t.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex justify-between items-center">
-                                    <div className="flex flex-col">
-                                        <span className="font-black text-white text-sm italic">{t.symbol}</span>
-                                        <span className="text-[10px] text-slate-500 font-bold uppercase">{t.direction} • {t.quantity} Lots</span>
-                                    </div>
+                                    <span className="font-black text-white text-sm italic">{t.symbol}</span>
                                     <span className={`font-black text-sm italic ${t.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>${t.pnl.toFixed(2)}</span>
                                 </div>
                             ))}
