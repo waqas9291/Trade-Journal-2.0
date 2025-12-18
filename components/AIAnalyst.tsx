@@ -21,11 +21,12 @@ export const AIAnalyst: React.FC<{ trades: Trade[] }> = ({ trades }) => {
         if (window.aistudio?.openSelectKey) {
             try {
                 await window.aistudio.openSelectKey();
-                // We show a message to confirm the user initiated the process
+                // We show a message immediately to confirm the user initiated the process. 
+                // The actual key update happens via process.env injection.
                 setMessages(prev => [...prev, { 
                     id: 'sys-' + Date.now(), 
                     role: 'assistant', 
-                    content: "Terminal Link Requested. Ensure you have selected a valid API Key from a paid Google Cloud project. Attempting to re-establish connection..." 
+                    content: "Terminal initialized. Connection re-established. Standing by for frequency synchronization." 
                 }]);
             } catch (err) {
                 console.error("Initialization failed", err);
@@ -51,12 +52,12 @@ export const AIAnalyst: React.FC<{ trades: Trade[] }> = ({ trades }) => {
                 }
             });
             
-            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: response.text || "Connection stable, but response was empty." }]);
+            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: response.text || "Frequency stable. No data received." }]);
         } catch (error: any) {
             console.error("AI Error:", error);
             let msg = "Terminal offline. Please initialize with a valid Paid API Key.";
             if (error?.message?.includes('entity was not found') || error?.message?.includes('API_KEY_INVALID')) {
-                msg = "The terminal has lost contact. The selected API key is either invalid or not from a paid project. Please re-initialize with a proper key.";
+                msg = "Frequency loss detected. The selected API key is either invalid or not from a paid project. Re-initialize now.";
             }
             setMessages(prev => [...prev, { id: 'err-' + Date.now(), role: 'assistant', content: msg, isError: true }]);
         } finally {
@@ -84,13 +85,12 @@ export const AIAnalyst: React.FC<{ trades: Trade[] }> = ({ trades }) => {
                     <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50 text-center">
                         <Zap className="h-12 w-12 mb-4 animate-pulse" />
                         <p className="text-xs font-black uppercase tracking-widest italic">Awaiting Frequency Synchronization...</p>
-                        <p className="text-[10px] mt-2 max-w-xs uppercase">Ensure your terminal is initialized with a Paid API Key to access high-level signal intelligence.</p>
+                        <p className="text-[10px] mt-2 max-w-xs uppercase">Initialize with a Paid API Key to access the Mr. Wick AI terminal.</p>
                     </div>
                 )}
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`p-4 rounded-2xl text-sm leading-relaxed max-w-[85%] ${msg.role === 'user' ? 'bg-gold-500 text-slate-900 font-bold italic' : 'bg-slate-800 text-slate-200 border border-slate-700'} ${msg.isError ? 'border-rose-500/50 bg-rose-500/5 text-rose-500' : ''}`}>
-                            {msg.isError && <AlertTriangle className="h-4 w-4 mb-2 inline mr-2" />}
                             <div className="whitespace-pre-wrap">{msg.content}</div>
                             {msg.isError && (
                                 <button 
@@ -111,7 +111,7 @@ export const AIAnalyst: React.FC<{ trades: Trade[] }> = ({ trades }) => {
                     type="text" value={input} 
                     onChange={e => setInput(e.target.value)} 
                     onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                    placeholder="Ask Mr. Wick for a signal or SMC setup analysis..." 
+                    placeholder="Ask Mr. Wick for a signal or setup analysis..." 
                     className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 text-white outline-none focus:ring-1 focus:ring-gold-500 font-medium" 
                 />
                 <button 
