@@ -24,7 +24,7 @@ export const Chart: React.FC = () => {
       "calendar": false,
       "support_host": "https://www.tradingview.com",
       "save_image": true,
-      "hide_side_toolbar": false, // ENABLED: For drawing tools
+      "hide_side_toolbar": false,
       "withdateranges": true,
       "details": true,
       "hotlist": true,
