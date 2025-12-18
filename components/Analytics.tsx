@@ -18,7 +18,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ trades, accountBalance, cu
         const totalProfit = wins.reduce((s, t) => s + t.pnl, 0);
         const totalLoss = Math.abs(closedTrades.filter(t => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
         const profitFactor = totalProfit / (totalLoss || 1);
-        return { winRate, profitFactor, totalTrades: closedTrades.length, net: currentBalance - accountBalance };
+        return { 
+            winRate, 
+            profitFactor, 
+            totalTrades: closedTrades.length, 
+            net: currentBalance - accountBalance,
+            avgWin: wins.length > 0 ? totalProfit / wins.length : 0,
+            avgLoss: closedTrades.length > wins.length ? totalLoss / (closedTrades.length - wins.length) : 0
+        };
     }, [closedTrades, currentBalance, accountBalance]);
 
     const weekdayData = useMemo(() => {
@@ -32,14 +39,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ trades, accountBalance, cu
     }, [closedTrades]);
 
     return (
-        <div className="h-full flex flex-col space-y-4 max-h-[calc(100vh-100px)]">
-            <header className="flex justify-between items-end">
+        <div className="h-full flex flex-col space-y-4 overflow-hidden">
+            <header className="flex justify-between items-end shrink-0">
                 <div>
                     <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Command Center</h2>
                     <p className="text-slate-500 text-sm italic">Strategic performance intelligence.</p>
                 </div>
                 <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-800">
-                   <p className="text-[10px] font-black text-gold-500 uppercase tracking-widest">Growth</p>
+                   <p className="text-[10px] font-black text-gold-500 uppercase tracking-widest">Global P/L</p>
                    <p className={`text-lg font-black italic ${stats.net >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {stats.net >= 0 ? '+' : '-'}${Math.abs(stats.net).toLocaleString()}
                    </p>
@@ -52,11 +59,13 @@ export const Analytics: React.FC<AnalyticsProps> = ({ trades, accountBalance, cu
                     <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl">
                         <div className="flex items-center gap-2 mb-2">
                            <Activity className="h-4 w-4 text-gold-500" />
-                           <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Live Performance</h3>
+                           <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Efficiency Stats</h3>
                         </div>
                         <StatItem label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} />
                         <StatItem label="Profit Factor" value={stats.profitFactor.toFixed(2)} />
                         <StatItem label="Sample Size" value={`${stats.totalTrades} Trades`} />
+                        <StatItem label="Avg Win" value={`$${stats.avgWin.toFixed(0)}`} highlight />
+                        <StatItem label="Avg Loss" value={`$${stats.avgLoss.toFixed(0)}`} isLoss />
                     </div>
 
                     <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl">
@@ -70,7 +79,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ trades, accountBalance, cu
                 </div>
 
                 {/* Main Graph Area */}
-                <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col">
+                <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col min-h-0">
                     <div className="flex justify-between items-center mb-6">
                        <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Yield By Session Day</h3>
                     </div>
@@ -95,9 +104,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({ trades, accountBalance, cu
     );
 };
 
-const StatItem = ({ label, value, highlight }: any) => (
+const StatItem = ({ label, value, highlight, isLoss }: any) => (
     <div className={`flex justify-between items-center py-2 border-b border-slate-800/50 ${highlight ? 'text-gold-500' : ''}`}>
         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</span>
-        <span className={`text-sm font-black italic ${highlight ? 'text-gold-500 text-lg' : 'text-white'}`}>{value}</span>
+        <span className={`text-sm font-black italic ${highlight ? 'text-gold-500 text-lg' : isLoss ? 'text-rose-500' : 'text-white'}`}>{value}</span>
     </div>
 );
