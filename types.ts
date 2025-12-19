@@ -19,6 +19,26 @@ export interface Trade {
   tp?: number;
 }
 
+export interface BacktestSession {
+  id: string;
+  name: string;
+  symbol: string;
+  initialBalance: number;
+  strategy: string;
+  timeframe: string;
+  createdAt: string;
+}
+
+export interface BacktestTrade {
+  id: string;
+  sessionId: string;
+  date: string;
+  pnl: number;
+  rMultiple: number;
+  result: 'WIN' | 'LOSS' | 'BE';
+  notes?: string;
+}
+
 export interface Withdrawal {
   id: string;
   accountId: string;
@@ -33,16 +53,7 @@ export interface Account {
   id: string;
   name: string;
   currency: string;
-  balance: number; // This acts as Initial Funding
-}
-
-export interface PriceAlert {
-  id: string;
-  symbol: string;
-  price: number;
-  condition: 'ABOVE' | 'BELOW';
-  active: boolean;
-  createdAt: string;
+  balance: number;
 }
 
 export interface DayStats {
