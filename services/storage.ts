@@ -1,9 +1,10 @@
-import { Trade, Account, Withdrawal, PriceAlert } from '../types';
+import { Trade, Account, Withdrawal, BacktestSession, BacktestTrade } from '../types';
 
 const TRADES_KEY = 'tz_journal_trades';
 const ACCOUNTS_KEY = 'tz_journal_accounts';
 const WITHDRAWALS_KEY = 'tz_journal_withdrawals';
-const ALERTS_KEY = 'tz_journal_alerts';
+const BACKTEST_SESSIONS_KEY = 'tz_backtest_sessions';
+const BACKTEST_TRADES_KEY = 'tz_backtest_trades';
 
 export const loadTrades = (): Trade[] => {
   try {
@@ -38,13 +39,24 @@ export const saveWithdrawals = (withdrawals: Withdrawal[]): void => {
   localStorage.setItem(WITHDRAWALS_KEY, JSON.stringify(withdrawals));
 };
 
-export const loadAlerts = (): PriceAlert[] => {
+export const loadBacktestSessions = (): BacktestSession[] => {
   try {
-    const data = localStorage.getItem(ALERTS_KEY);
+    const data = localStorage.getItem(BACKTEST_SESSIONS_KEY);
     return data ? JSON.parse(data) : [];
   } catch (e) { return []; }
 };
 
-export const saveAlerts = (alerts: PriceAlert[]): void => {
-  localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
+export const saveBacktestSessions = (sessions: BacktestSession[]): void => {
+  localStorage.setItem(BACKTEST_SESSIONS_KEY, JSON.stringify(sessions));
+};
+
+export const loadBacktestTrades = (): BacktestTrade[] => {
+  try {
+    const data = localStorage.getItem(BACKTEST_TRADES_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) { return []; }
+};
+
+export const saveBacktestTrades = (trades: BacktestTrade[]): void => {
+  localStorage.setItem(BACKTEST_TRADES_KEY, JSON.stringify(trades));
 };
