@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, BookOpen, BarChart3, Settings, Calculator, CandlestickChart, Plus, HelpCircle, GraduationCap, Zap, ChevronLeft, Wallet } from 'lucide-react';
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Calculator, CandlestickChart, Plus, HelpCircle, GraduationCap, Zap, ChevronLeft, Wallet, Microscope } from 'lucide-react';
 import { Account } from '../types';
 
 interface LayoutProps {
@@ -18,6 +18,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'history', label: 'Daily Journal', icon: BookOpen },
+    { id: 'backtesting', label: 'Backtesting', icon: Microscope },
     { id: 'analytics', label: 'Reports', icon: BarChart3 },
     { id: 'chart', label: 'Insights', icon: CandlestickChart },
     { id: 'calculator', label: 'Calculator', icon: Calculator },
@@ -64,7 +65,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
             >
               <item.icon className={`h-4 w-4 mr-3 ${currentView === item.id ? 'text-indigo-400' : 'text-slate-500'}`} />
               {item.label}
-              {item.id === 'chart' && <span className="ml-auto text-[8px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-black">NEW</span>}
+              {(item.id === 'chart' || item.id === 'backtesting') && <span className="ml-auto text-[8px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-black">NEW</span>}
             </button>
           ))}
 
@@ -94,6 +95,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 shrink-0">
            <div className="flex items-center gap-4">
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-500">
+                 <MenuIcon className="h-4 w-4" />
+              </button>
               <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
                  <ChevronLeft className="h-4 w-4" />
               </button>
@@ -123,3 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
     </div>
   );
 };
+
+const MenuIcon = ({ className }: { className?: string }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+);
